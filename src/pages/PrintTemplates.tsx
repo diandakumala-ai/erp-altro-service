@@ -243,7 +243,7 @@ export default function PrintTemplates() {
     );
   }
 
-  // ─── INVOICE (½ A4 / A5) ─────────────────────────────────────────────────
+  // ─── INVOICE (½ A4 landscape / A5 landscape) ────────────────────────────
   if (type === 'invoice') {
     const diskon = wo.diskon ?? 0;
     const grandTotal = Math.max(subtotal - diskon, 0);
@@ -254,7 +254,7 @@ export default function PrintTemplates() {
           @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             body { background: white !important; margin: 0; padding: 0; }
-            @page { size: A5 portrait; margin: 0.8cm; }
+            @page { size: A5 landscape; margin: 0.8cm; }
             .no-print { display: none !important; }
           }
         `}</style>
@@ -263,7 +263,7 @@ export default function PrintTemplates() {
         <div className="no-print sticky top-0 left-0 right-0 bg-slate-800 text-white p-3 flex justify-between items-center z-50 shadow-md">
           <div>
             <h2 className="font-semibold text-base">Preview Invoice · {wo.id.replace('WO-', 'INV-')}</h2>
-            <p className="text-xs text-slate-300">Kertas ½ A4 (A5) · Orientasi Potrait · Margin 0.8 cm</p>
+            <p className="text-xs text-slate-300">Kertas ½ A4 (A5 Landscape) · Horizontal · Margin 0.8 cm</p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => window.close()} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium">Tutup</button>
@@ -274,8 +274,8 @@ export default function PrintTemplates() {
           </div>
         </div>
 
-        {/* Halaman A5 */}
-        <div className="bg-white text-black px-7 py-6 font-sans max-w-[148mm] mx-auto min-h-[210mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none text-xs">
+        {/* Halaman A5 Landscape */}
+        <div className="bg-white text-black px-7 py-5 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none text-xs">
 
           {/* Header */}
           <div className="flex justify-between items-start mb-4">
@@ -395,12 +395,12 @@ export default function PrintTemplates() {
           </table>
 
           {/* Tanda Tangan — 2 kolom: Penerima (kiri) + Direktur (kanan) */}
-          <div className="grid grid-cols-2 gap-4 mt-2 px-1">
+          <div className="grid grid-cols-2 gap-4 items-end mt-2 px-1">
             {/* Penerima */}
             <div className="text-center">
               <p className="text-xs font-medium">Penerima,</p>
               <div className="h-14 mt-1"></div>
-              <div className="border-t border-black pt-1.5">
+              <div className="pt-1.5">
                 <p className="text-xs">(................................)</p>
                 <p className="text-[10px] text-gray-500 mt-0.5">{wo.customer}</p>
               </div>
@@ -410,7 +410,7 @@ export default function PrintTemplates() {
               <p className="text-[10px] text-gray-500">{bs.kota || 'Pekanbaru'}, {today}</p>
               <p className="text-xs font-medium mt-0.5">Hormat Kami,</p>
               <div className="h-14 mt-1"></div>
-              <div className="border-t border-black pt-1.5">
+              <div className="pt-1.5">
                 <p className="font-bold text-xs">{bs.namaPemilik || bs.namaBengkel}</p>
                 <p className="text-[10px] text-gray-500">{bs.jabatanPemilik || 'Direktur'}</p>
               </div>
@@ -516,11 +516,11 @@ export default function PrintTemplates() {
           </div>
 
           {/* Tanda Tangan — 3 kolom: Admin · Teknisi · Penerima/Pelanggan */}
-          <div className="grid grid-cols-3 gap-6 mt-2 px-4">
+          <div className="grid grid-cols-3 gap-6 items-end mt-2 px-4">
             <div className="text-center">
               <p className="text-sm font-medium">Admin,</p>
               <div className="h-20 mt-1"></div>
-              <div className="border-t border-black pt-1.5">
+              <div className="pt-1.5">
                 <p className="text-sm">(................................)</p>
                 <p className="text-xs text-gray-500 mt-0.5">Admin</p>
               </div>
@@ -528,7 +528,7 @@ export default function PrintTemplates() {
             <div className="text-center">
               <p className="text-sm font-medium">Teknisi,</p>
               <div className="h-20 mt-1"></div>
-              <div className="border-t border-black pt-1.5">
+              <div className="pt-1.5">
                 <p className="text-sm">
                   ({wo.technician && wo.technician !== '-' ? wo.technician : '................................'})
                 </p>
@@ -538,7 +538,7 @@ export default function PrintTemplates() {
             <div className="text-center">
               <p className="text-sm font-medium">Pelanggan,</p>
               <div className="h-20 mt-1"></div>
-              <div className="border-t border-black pt-1.5">
+              <div className="pt-1.5">
                 <p className="text-sm">(................................)</p>
                 <p className="text-xs text-gray-500 mt-0.5">{wo.customer}</p>
               </div>
@@ -558,7 +558,7 @@ export default function PrintTemplates() {
           @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             body { background: white !important; margin: 0; padding: 0; }
-            @page { size: A5 portrait; margin: 0.8cm; }
+            @page { size: A5 landscape; margin: 0.8cm; }
             .no-print { display: none !important; }
           }
         `}</style>
@@ -567,7 +567,7 @@ export default function PrintTemplates() {
         <div className="no-print sticky top-0 left-0 right-0 bg-slate-800 text-white p-3 flex justify-between items-center z-50 shadow-md">
           <div>
             <h2 className="font-semibold text-base">Preview Surat Jalan · {wo.id}</h2>
-            <p className="text-xs text-slate-300">Kertas ½ A4 (A5) · Orientasi Potrait · Margin 0.8 cm</p>
+            <p className="text-xs text-slate-300">Kertas ½ A4 (A5 Landscape) · Horizontal · Margin 0.8 cm</p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => window.close()} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium">Tutup</button>
@@ -578,8 +578,8 @@ export default function PrintTemplates() {
           </div>
         </div>
 
-        {/* Halaman A5 */}
-        <div className="bg-white text-black px-7 py-5 font-sans max-w-[148mm] mx-auto min-h-[210mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none text-xs">
+        {/* Halaman A5 Landscape */}
+        <div className="bg-white text-black px-7 py-4 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none text-xs">
 
           {/* Header */}
           <div className="flex justify-between items-start mb-4 border-b-2 border-black pb-3">
@@ -645,13 +645,13 @@ export default function PrintTemplates() {
           <p className="mb-4 text-xs italic">Barang diterima dalam keadaan baik dan cukup.</p>
 
           {/* Tanda Tangan — 3 kolom: Penerima · Pengirim · Direktur */}
-          <div className="grid grid-cols-3 gap-3 mt-1">
+          <div className="grid grid-cols-3 gap-3 items-end mt-1">
 
             {/* Penerima */}
             <div className="text-center">
               <p className="text-xs font-medium">Penerima,</p>
               <div className="h-14 mt-1"></div>
-              <div className="border-t border-black pt-1.5">
+              <div className="pt-1.5">
                 <p className="text-xs">(................................)</p>
                 <p className="text-[10px] text-gray-500 mt-0.5">{wo.customer}</p>
               </div>
@@ -661,7 +661,7 @@ export default function PrintTemplates() {
             <div className="text-center">
               <p className="text-xs font-medium">Pengirim / Supir,</p>
               <div className="h-14 mt-1"></div>
-              <div className="border-t border-black pt-1.5">
+              <div className="pt-1.5">
                 <p className="text-xs">(................................)</p>
                 <p className="text-[10px] text-gray-500 mt-0.5">&nbsp;</p>
               </div>
@@ -672,7 +672,7 @@ export default function PrintTemplates() {
               <p className="text-[10px] text-gray-500">{bs.kota || 'Pekanbaru'}, {today}</p>
               <p className="text-xs font-medium mt-0.5">Hormat Kami,</p>
               <div className="h-14 mt-1"></div>
-              <div className="border-t border-black pt-1.5">
+              <div className="pt-1.5">
                 <p className="font-bold text-xs">{bs.namaPemilik || bs.namaBengkel}</p>
                 <p className="text-[10px] text-gray-500">{bs.jabatanPemilik || 'Direktur'}</p>
               </div>

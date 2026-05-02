@@ -949,3 +949,18 @@ export default function Finance() {
     </div>
   );
 }
+"px-4 py-3 text-right font-bold text-slate-700">Total Piutang Keseluruhan:</td>
+                        <td className="px-4 py-3 text-right font-bold text-amber-700 text-base">Rp {fmt(totalPiutang)}</td>
+                        <td colSpan={2}></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
