@@ -13,6 +13,7 @@ export interface WorkOrder {
   dateIn: string;
   estimasiSelesai: string;
   estimatedCost: number;
+  diskon?: number;       // Diskon nominal (Rp) — opsional
 }
 
 export interface InventoryItem {
@@ -53,10 +54,12 @@ export const computeStatusBayar = (wo: WorkOrder, finance: FinanceTransaction[])
   const totalBayar = finance
     .filter(f => f.kategori === 'Pemasukan' && f.deskripsi.includes(wo.id) && f.nominal > 0)
     .reduce((sum, f) => sum + f.nominal, 0);
-  const sisaTagihan = Math.max((wo.estimatedCost || 0) - totalBayar, 0);
+  // Tagihan efektif sudah dikurangi diskon
+  const effectiveTotal = Math.max((wo.estimatedCost || 0) - (wo.diskon || 0), 0);
+  const sisaTagihan = Math.max(effectiveTotal - totalBayar, 0);
   let status: StatusBayar;
   if (totalBayar <= 0) status = 'Belum Bayar';
-  else if (totalBayar >= (wo.estimatedCost || 0)) status = 'Lunas';
+  else if (totalBayar >= effectiveTotal) status = 'Lunas';
   else status = 'DP';
   return { status, totalBayar, sisaTagihan };
 };

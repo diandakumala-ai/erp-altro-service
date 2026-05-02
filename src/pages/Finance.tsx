@@ -107,12 +107,14 @@ function DeskripsiCell({ value, onSave, onFill, kategori }: {
 
   const suggestionsPemasukan = kategori === 'Pemasukan'
     ? workOrders.flatMap(wo => {
+        // Tagihan efektif = estimatedCost dikurangi diskon
+        const effectiveTotal = Math.max((wo.estimatedCost || 0) - (wo.diskon || 0), 0);
         const dpPaid = finance
           .filter(f => f.deskripsi.includes(`Pembayaran DP`) && f.deskripsi.includes(wo.id) && f.nominal > 0)
           .reduce((sum, f) => sum + f.nominal, 0);
-        const remaining = Math.max(wo.estimatedCost - dpPaid, 0);
+        const remaining = Math.max(effectiveTotal - dpPaid, 0);
         return [
-          { label: `Pembayaran DP - ${wo.id} (${wo.customer})`, nominal: Math.round(wo.estimatedCost * 0.5), type: 'dp' as const },
+          { label: `Pembayaran DP - ${wo.id} (${wo.customer})`, nominal: Math.round(effectiveTotal * 0.5), type: 'dp' as const },
           { label: `Pelunasan - ${wo.id} (${wo.customer})`, nominal: remaining, type: 'lunas' as const },
         ];
       })
@@ -890,7 +892,12 @@ export default function Finance() {
                           <td className="px-4 py-3 font-mono text-xs font-medium text-slate-700">{wo.id}</td>
                           <td className="px-4 py-3 text-slate-800 font-medium">{wo.customer}</td>
                           <td className="px-4 py-3 text-slate-600 text-xs">{wo.merk}</td>
-                          <td className="px-4 py-3 text-right font-semibold text-slate-700">Rp {fmt(wo.estimatedCost)}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-700">
+                            Rp {fmt(Math.max((wo.estimatedCost || 0) - (wo.diskon || 0), 0))}
+                            {(wo.diskon || 0) > 0 && (
+                              <span className="block text-[10px] text-amber-500 font-normal">diskon Rp {fmt(wo.diskon!)}</span>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-right font-medium text-green-600">Rp {fmt(info.totalBayar)}</td>
                           <td className="px-4 py-3 text-right font-bold text-amber-700">Rp {fmt(info.sisaTagihan)}</td>
                           <td className="px-4 py-3 text-center">

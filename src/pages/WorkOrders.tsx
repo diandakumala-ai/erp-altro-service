@@ -266,7 +266,7 @@ export default function WorkOrders() {
     if (!selectedWO) return;
     const matCost = boms.filter(b => b.woId === selectedWO.id).reduce((a, b) => a + b.jumlah * b.harga, 0);
     const svcCost = services.filter(s => s.woId === selectedWO.id).reduce((a, s) => a + s.biaya, 0);
-    updateWorkOrder({ ...selectedWO, estimatedCost: matCost + svcCost });
+    updateWorkOrder({ ...selectedWO, estimatedCost: matCost + svcCost, diskon: selectedWO.diskon ?? 0 });
     setSelectedWO(null);
   };
 
@@ -474,6 +474,32 @@ export default function WorkOrders() {
                   </table>
                 </div>
               </div>
+
+              {/* Diskon */}
+              <div className="bg-white border border-amber-200 rounded-lg shadow-sm p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h4 className="font-semibold text-slate-700">Diskon</h4>
+                    <p className="text-xs text-slate-400 mt-0.5">Diskon akan mengurangi total tagihan di Invoice dan pencatatan piutang.</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-sm text-slate-600 font-medium">Rp</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={selectedWO.diskon ?? 0}
+                      onChange={e => setSelectedWO({ ...selectedWO, diskon: Math.max(0, Number(e.target.value)) })}
+                      className="border border-slate-300 rounded-lg px-3 py-1.5 w-40 text-sm text-right focus:ring-2 focus:ring-amber-400 focus:outline-none"
+                    />
+                    {(selectedWO.diskon ?? 0) > 0 && selectedWO.estimatedCost > 0 && (
+                      <span className="text-xs text-amber-600 font-semibold bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                        {((selectedWO.diskon! / selectedWO.estimatedCost) * 100).toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
             </div>
             <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-3 shrink-0">
               <button onClick={() => setSelectedWO(null)} className="px-4 py-2 border border-slate-300 bg-white text-slate-700 rounded-lg font-medium hover:bg-slate-50 text-sm">Batal</button>
@@ -486,3 +512,4 @@ export default function WorkOrders() {
     </div>
   );
 }
+             
