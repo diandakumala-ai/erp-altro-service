@@ -1,0 +1,665 @@
+import { useParams } from 'react-router-dom';
+import { useStore, computeStatusBayar } from '../store/useStore';
+
+const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(n);
+
+export default function PrintTemplates() {
+  const { type, id } = useParams();
+
+  const workOrders = useStore(s => s.workOrders);
+  const boms = useStore(s => s.boms);
+  const services = useStore(s => s.services);
+  const finance = useStore(s => s.finance);
+  const bs = useStore(s => s.bengkelSettings);
+  
+  const wo = workOrders.find(w => w.id === id);
+  const woBoms = boms.filter(b => b.woId === id);
+  const woServices = services.filter(s => s.woId === id);
+
+  const today = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+  const totalMaterial = woBoms.reduce((acc, curr) => acc + (curr.jumlah * curr.harga), 0);
+  const totalJasa = woServices.reduce((acc, curr) => acc + curr.biaya, 0);
+  const subtotal = totalMaterial + totalJasa;
+
+  // Halaman laporan keuangan tidak butuh `wo` — keluar lebih awal sebelum guard.
+  if (type === 'laporan-keuangan') {
+    // Baca periode dari query param ?period=YYYY-MM
+    const params = new URLSearchParams(window.location.search);
+    const period = params.get('period') || '';
+
+    const trxFiltered = period
+      ? finance.filter(t => t.tanggal.startsWith(period))
+      : finance;
+    const trxSorted = [...trxFiltered].sort((a, b) => a.tanggal.localeCompare(b.tanggal));
+
+    const totalPemasukan = trxFiltered.filter(r => r.nominal > 0).reduce((a, r) => a + r.nominal, 0);
+    const totalPengeluaran = Math.abs(trxFiltered.filter(r => r.nominal < 0).reduce((a, r) => a + r.nominal, 0));
+    const labaBersih = totalPemasukan - totalPengeluaran;
+
+    // Label periode
+    const periodLabel = period
+      ? (() => {
+          const [y, m] = period.split('-');
+          return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+        })()
+      : 'Semua Periode';
+
+    // Breakdown per sub-kategori
+    const subsPemasukan = ['Pembayaran Servis', 'DP', 'Lain-lain'].map(sub => ({
+      sub, total: trxFiltered.filter(t => t.nominal > 0 && t.subKategori === sub).reduce((a, b) => a + b.nominal, 0),
+    })).concat([{ sub: 'Lainnya (tanpa kategori)', total: trxFiltered.filter(t => t.nominal > 0 && !t.subKategori).reduce((a, b) => a + b.nominal, 0) }])
+      .filter(s => s.total > 0);
+
+    const subsPengeluaran = ['Material/Suku Cadang', 'Listrik & Operasional', 'Gaji Teknisi', 'Lain-lain'].map(sub => ({
+      sub, total: Math.abs(trxFiltered.filter(t => t.nominal < 0 && t.subKategori === sub).reduce((a, b) => a + b.nominal, 0)),
+    })).concat([{ sub: 'Lainnya (tanpa kategori)', total: Math.abs(trxFiltered.filter(t => t.nominal < 0 && !t.subKategori).reduce((a, b) => a + b.nominal, 0)) }])
+      .filter(s => s.total > 0);
+
+    // Piutang aktif (all time)
+    const piutangList = workOrders
+      .filter(wo => wo.estimatedCost > 0)
+      .map(wo => ({ wo, info: computeStatusBayar(wo, finance) }))
+      .filter(({ info }) => info.status !== 'Lunas');
+    const totalPiutang = piutangList.reduce((a, { info }) => a + info.sisaTagihan, 0);
+
+    return (
+      <div className="min-h-screen bg-slate-200 print:bg-white text-slate-800">
+        <style>{`
+          @media print {
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            body { background: white !important; margin: 0; padding: 0; }
+            @page { size: A4 portrait; margin: 1.5cm; }
+            .no-print { display: none !important; }
+            .page-break { page-break-before: always; }
+          }
+        `}</style>
+
+        {/* Toolbar — tidak dicetak */}
+        <div className="no-print sticky top-0 bg-slate-900 text-white px-6 py-3 flex justify-between items-center z-50 shadow-lg">
+          <div>
+            <h2 className="font-bold text-base">Preview Laporan Keuangan</h2>
+            <p className="text-xs text-slate-400">Periode: {periodLabel} · Gunakan kertas A4, orientasi Potrait</p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => window.close()} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium">Tutup</button>
+            <button onClick={() => window.print()} className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-bold flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+              🖨️ Cetak / Simpan PDF
+            </button>
+          </div>
+        </div>
+
+        {/* Halaman A4 */}
+        <div className="bg-white mx-auto my-8 px-12 py-10 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 w-[210mm] min-h-[297mm] font-sans">
+
+          {/* Header */}
+          <div className="flex justify-between items-center border-b-2 border-slate-800 pb-5 mb-6">
+            <div className="flex items-center gap-4">
+              <img
+                src={bs.logoUrl || '/primary-logo.png'}
+                alt="Logo"
+                className="w-14 h-14 object-contain"
+                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+              <div>
+                <h1 className="text-xl font-black text-slate-900 leading-tight">{bs.namaBengkel}</h1>
+                <p className="text-xs text-slate-500 mt-0.5">{bs.alamat}{bs.kota ? `, ${bs.kota}` : ''}</p>
+                <p className="text-xs text-slate-500">
+                  {bs.telepon && `Telp: ${bs.telepon}`}
+                  {bs.telepon && bs.hp && ' | '}
+                  {bs.hp && `HP: ${bs.hp}`}
+                </p>
+                {bs.npwp && <p className="text-xs text-slate-500">NPWP: {bs.npwp}</p>}
+              </div>
+            </div>
+            <div className="text-right">
+              <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">Laporan Laba Rugi</h2>
+              <p className="text-sm font-semibold text-indigo-700">{periodLabel}</p>
+              <p className="text-xs text-slate-400 mt-1">Dicetak: {today}</p>
+            </div>
+          </div>
+
+          {/* Ringkasan KPI */}
+          <div className="grid grid-cols-3 gap-4 mb-7">
+            <div className="border-2 border-green-200 bg-green-50 rounded-lg p-4 text-center">
+              <p className="text-[10px] font-bold text-green-600 uppercase tracking-widest mb-1">Total Pemasukan</p>
+              <p className="text-xl font-black text-green-800">Rp {fmt(totalPemasukan)}</p>
+            </div>
+            <div className="border-2 border-red-200 bg-red-50 rounded-lg p-4 text-center">
+              <p className="text-[10px] font-bold text-red-600 uppercase tracking-widest mb-1">Total Pengeluaran</p>
+              <p className="text-xl font-black text-red-800">Rp {fmt(totalPengeluaran)}</p>
+            </div>
+            <div className={`border-2 rounded-lg p-4 text-center ${labaBersih >= 0 ? 'border-indigo-200 bg-indigo-50' : 'border-orange-200 bg-orange-50'}`}>
+              <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${labaBersih >= 0 ? 'text-indigo-600' : 'text-orange-600'}`}>
+                {labaBersih >= 0 ? 'Laba Bersih' : 'Rugi Bersih'}
+              </p>
+              <p className={`text-xl font-black ${labaBersih >= 0 ? 'text-indigo-900' : 'text-orange-800'}`}>
+                Rp {fmt(Math.abs(labaBersih))}
+              </p>
+            </div>
+          </div>
+
+          {/* Breakdown 2 Kolom */}
+          <div className="grid grid-cols-2 gap-5 mb-7">
+            {/* Pemasukan */}
+            <div>
+              <h3 className="text-sm font-bold text-slate-700 border-b border-slate-200 pb-1 mb-3 flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" /> Rincian Pemasukan
+              </h3>
+              <table className="w-full text-xs">
+                <tbody>
+                  {subsPemasukan.map(({ sub, total }) => (
+                    <tr key={sub} className="border-b border-slate-100">
+                      <td className="py-1.5 text-slate-600">{sub}</td>
+                      <td className="py-1.5 text-right font-semibold text-slate-800">Rp {fmt(total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-green-300">
+                    <td className="py-2 font-bold text-green-800">Total</td>
+                    <td className="py-2 text-right font-black text-green-800">Rp {fmt(totalPemasukan)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* Pengeluaran */}
+            <div>
+              <h3 className="text-sm font-bold text-slate-700 border-b border-slate-200 pb-1 mb-3 flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" /> Rincian Pengeluaran
+              </h3>
+              <table className="w-full text-xs">
+                <tbody>
+                  {subsPengeluaran.map(({ sub, total }) => (
+                    <tr key={sub} className="border-b border-slate-100">
+                      <td className="py-1.5 text-slate-600">{sub}</td>
+                      <td className="py-1.5 text-right font-semibold text-slate-800">Rp {fmt(total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-red-300">
+                    <td className="py-2 font-bold text-red-800">Total</td>
+                    <td className="py-2 text-right font-black text-red-800">Rp {fmt(totalPengeluaran)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          {/* Rincian Transaksi */}
+          <h3 className="text-sm font-bold text-slate-700 border-b border-slate-200 pb-1.5 mb-3">
+            Rincian Transaksi ({trxSorted.length} transaksi)
+          </h3>
+          <table className="w-full text-xs border-collapse mb-8">
+            <thead>
+              <tr className="bg-slate-100 border-y border-slate-300">
+                <th className="py-2 px-3 text-left w-20">Tanggal</th>
+                <th className="py-2 px-3 text-left w-24">Kategori</th>
+                <th className="py-2 px-3 text-left w-32">Sub-Kategori</th>
+                <th className="py-2 px-3 text-left">Deskripsi</th>
+                <th className="py-2 px-3 text-right w-32">Nominal (Rp)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {trxSorted.map((t, i) => (
+                <tr key={i} className={`border-b border-slate-200 ${i % 2 === 1 ? 'bg-slate-50' : ''}`}>
+                  <td className="py-1.5 px-3">{t.tanggal}</td>
+                  <td className="py-1.5 px-3">{t.kategori}</td>
+                  <td className="py-1.5 px-3 text-slate-500">{t.subKategori || '-'}</td>
+                  <td className="py-1.5 px-3">{t.deskripsi}</td>
+                  <td className={`py-1.5 px-3 text-right font-semibold ${t.nominal >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                    {t.nominal >= 0 ? '+' : '-'} {fmt(Math.abs(t.nominal))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="border-t-2 border-slate-300">
+              <tr>
+                <td colSpan={4} className="py-2 px-3 text-right font-bold text-slate-700">Laba / (Rugi) Bersih Periode Ini:</td>
+                <td className={`py-2 px-3 text-right font-black ${labaBersih >= 0 ? 'text-indigo-800' : 'text-orange-700'}`}>
+                  {labaBersih >= 0 ? '+' : '-'} {fmt(Math.abs(labaBersih))}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+
+          {/* Piutang Belum Lunas */}
+          {piutangList.length > 0 && (
+            <>
+              <h3 className="text-sm font-bold text-slate-700 border-b border-slate-200 pb-1.5 mb-3">
+                Piutang Belum Lunas ({piutangList.length} WO) — Total Rp {fmt(totalPiutang)}
+              </h3>
+              <table className="w-full text-xs border-collapse mb-8">
+                <thead>
+                  <tr className="bg-amber-50 border-y border-amber-200">
+                    <th className="py-1.5 px-3 text-left w-28">No. WO</th>
+                    <th className="py-1.5 px-3 text-left">Pelanggan</th>
+                    <th className="py-1.5 px-3 text-left w-32">Item</th>
+                    <th className="py-1.5 px-3 text-right w-28">Total Tagihan</th>
+                    <th className="py-1.5 px-3 text-right w-28">Sudah Bayar</th>
+                    <th className="py-1.5 px-3 text-right w-28">Sisa</th>
+                    <th className="py-1.5 px-3 text-center w-20">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {piutangList.map(({ wo, info }, i) => (
+                    <tr key={wo.id} className={`border-b border-slate-200 ${i % 2 === 1 ? 'bg-slate-50' : ''}`}>
+                      <td className="py-1.5 px-3 font-mono">{wo.id}</td>
+                      <td className="py-1.5 px-3">{wo.customer}</td>
+                      <td className="py-1.5 px-3 text-slate-500">{wo.merk}</td>
+                      <td className="py-1.5 px-3 text-right">{fmt(wo.estimatedCost)}</td>
+                      <td className="py-1.5 px-3 text-right text-green-700">{fmt(info.totalBayar)}</td>
+                      <td className="py-1.5 px-3 text-right font-bold text-amber-700">{fmt(info.sisaTagihan)}</td>
+                      <td className="py-1.5 px-3 text-center font-semibold">{info.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="border-t-2 border-amber-300">
+                  <tr>
+                    <td colSpan={5} className="py-2 px-3 text-right font-bold text-slate-700">Total Piutang:</td>
+                    <td className="py-2 px-3 text-right font-black text-amber-700">{fmt(totalPiutang)}</td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </>
+          )}
+
+          {/* Tanda Tangan */}
+          <div className="mt-10 flex justify-end">
+            <div className="text-center w-52">
+              <p className="text-xs mb-14">{bs.kota || 'Pekanbaru'}, {today}</p>
+              <div className="border-t border-slate-700 pt-1">
+                <p className="text-xs font-bold">{bs.namaPemilik || 'Bagian Keuangan'}</p>
+                <p className="text-xs text-slate-500">{bs.jabatanPemilik || bs.namaBengkel}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Untuk semua tipe lainnya (invoice, spk, surat-jalan), butuh `wo`.
+  if (!wo) {
+    return (
+      <div className="p-10 text-center">
+        <h2>Data tidak ditemukan.</h2>
+        <button onClick={() => window.close()} className="mt-4 text-indigo-600 underline">Tutup tab ini</button>
+      </div>
+    );
+  }
+
+  if (type === 'invoice') {
+    return (
+      <div className="min-h-screen bg-slate-200 print:bg-white">
+        <style>{`
+          @media print {
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            body { background: white !important; margin: 0; padding: 0; }
+            @page { size: A4 portrait; margin: 1.5cm; }
+            .no-print { display: none !important; }
+          }
+        `}</style>
+
+        {/* Sticky Action Bar - Not visible in print */}
+        <div className="no-print sticky top-0 left-0 right-0 bg-slate-800 text-white p-4 flex justify-between items-center z-50 shadow-md">
+          <div>
+            <h2 className="font-semibold text-lg">Preview Invoice · {wo.id.replace('WO-', 'INV-')}</h2>
+            <p className="text-xs text-slate-300">Kertas A4 · Orientasi Potrait · Margin 1.5 cm</p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => window.close()} className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors">Tutup</button>
+            <button onClick={() => window.print()} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+              🖨️ Cetak / Simpan PDF
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white text-black p-10 font-sans max-w-[210mm] mx-auto min-h-[297mm] my-8 shadow-2xl print:shadow-none print:my-0 print:p-0 print:max-w-none">
+          {/* Header Invoice */}
+        <div className="flex justify-between items-start mb-8">
+          <div className="flex items-start gap-5">
+            <img src={bs.logoUrl || '/primary-logo.png'} alt="Logo" className="h-24 w-auto object-contain object-left" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            <div>
+              <h1 className="text-3xl font-bold font-serif text-blue-900 tracking-wider">{bs.namaBengkel}</h1>
+              <p className="text-xs mt-1 font-semibold">{bs.alamat}{bs.kota ? `, ${bs.kota}` : ''}</p>
+              <p className="text-xs">
+                {bs.telepon && `Telp: ${bs.telepon}`}
+                {bs.telepon && bs.hp && ' | '}
+                {bs.hp && `HP: ${bs.hp}`}
+              </p>
+              {bs.email && <p className="text-xs">Email: {bs.email}</p>}
+              {bs.npwp && <p className="text-xs">NPWP: {bs.npwp}</p>}
+            </div>
+          </div>
+          <div className="text-right">
+            <p>{bs.kota || 'Pekanbaru'}, {today}</p>
+            <div className="mt-4">
+              <p>Kepada Yth,</p>
+              <p className="font-bold">{wo.customer}</p>
+              <p className="mt-2">No.Invoice : {wo.id.replace('WO-', 'INV-')}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Table Invoice */}
+        <table className="w-full border border-black mb-6 text-sm">
+          <thead>
+            <tr className="border-b border-black">
+              <th className="py-2 px-3 border-r border-black text-center w-12">NO.</th>
+              <th className="py-2 px-3 border-r border-black text-center w-20">Qty</th>
+              <th className="py-2 px-3 border-r border-black text-left">KETERANGAN</th>
+              <th className="py-2 px-3 border-r border-black text-right w-32">Harga @</th>
+              <th className="py-2 px-3 text-right w-36">JUMLAH</th>
+            </tr>
+          </thead>
+          <tbody>
+            {/* Main Item */}
+            <tr>
+              <td className="py-1 px-3 border-r border-black text-center">1.</td>
+              <td className="py-1 px-3 border-r border-black text-center">1 UNIT</td>
+              <td className="py-1 px-3 border-r border-black font-semibold">{wo.merk}</td>
+              <td className="py-1 px-3 border-r border-black text-right"></td>
+              <td className="py-1 px-3 text-right"></td>
+            </tr>
+            {/* Jasa Details */}
+            {woServices.map((svc) => (
+              <tr key={svc.id}>
+                <td className="py-1 px-3 border-r border-black"></td>
+                <td className="py-1 px-3 border-r border-black text-center">1 JOB</td>
+                <td className="py-1 px-3 border-r border-black pl-6">- {svc.deskripsi}</td>
+                <td className="py-1 px-3 border-r border-black text-right">{fmt(svc.biaya)}</td>
+                <td className="py-1 px-3 text-right">{fmt(svc.biaya)}</td>
+              </tr>
+            ))}
+            {/* BOM Details */}
+            {woBoms.map((bom) => (
+              <tr key={bom.id}>
+                <td className="py-1 px-3 border-r border-black"></td>
+                <td className="py-1 px-3 border-r border-black text-center">{bom.jumlah} {bom.satuan}</td>
+                <td className="py-1 px-3 border-r border-black pl-6">- {bom.barang}</td>
+                <td className="py-1 px-3 border-r border-black text-right">{fmt(bom.harga)}</td>
+                <td className="py-1 px-3 text-right">{fmt(bom.jumlah * bom.harga)}</td>
+              </tr>
+            ))}
+            
+            {/* Empty space filler to push footer down a bit if needed */}
+            <tr>
+              <td className="py-10 border-r border-black"></td>
+              <td className="py-10 border-r border-black"></td>
+              <td className="py-10 border-r border-black"></td>
+              <td className="py-10 border-r border-black"></td>
+              <td className="py-10"></td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr className="border-t border-black">
+              <td colSpan={3} className="py-2 px-3 border-r border-black align-top text-xs" rowSpan={3}>
+                <p className="font-semibold mb-1">Pembayaran dapat ditransfer ke:</p>
+                <p>BANK MANDIRI A/N SUWALDI NO.REK 108-00-1007188-5</p>
+                <p>BANK BCA A/N AZWA ADITYA MAULANA NO.REK 8230531308</p>
+              </td>
+              <td className="py-1 px-3 border-r border-black border-b border-black text-right font-semibold">Jumlah</td>
+              <td className="py-1 px-3 border-b border-black text-right font-semibold">{fmt(subtotal)}</td>
+            </tr>
+            <tr>
+              <td className="py-1 px-3 border-r border-black text-right font-bold text-lg">Total</td>
+              <td className="py-1 px-3 text-right font-bold text-lg">{fmt(subtotal)}</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        {/* Tanda Tangan Direktur */}
+        <div className="mt-8 flex justify-end pr-4">
+          <div className="text-center w-56">
+            <p className="text-sm">{bs.kota || 'Pekanbaru'}, {today}</p>
+            <p className="text-sm font-medium mt-1">Hormat Kami,</p>
+            <p className="text-sm font-medium">{bs.namaBengkel}</p>
+            <div className="h-16"></div>
+            <div className="border-t border-black pt-1.5">
+              <p className="font-bold text-sm">{bs.namaPemilik || bs.namaBengkel}</p>
+              <p className="text-xs text-gray-600">{bs.jabatanPemilik || 'Direktur'}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+    );
+  }
+
+  if (type === 'spk') {
+    return (
+      <div className="min-h-screen bg-slate-200 print:bg-white">
+        <style>{`
+          @media print {
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            body { background: white !important; margin: 0; padding: 0; }
+            @page { size: A4 portrait; margin: 1.5cm; }
+            .no-print { display: none !important; }
+            .spk-page {
+              page-break-inside: avoid;
+              page-break-after: avoid;
+              page-break-before: avoid;
+              max-height: calc(297mm - 3cm);
+              overflow: hidden;
+            }
+          }
+        `}</style>
+
+        {/* Sticky Action Bar - Not visible in print */}
+        <div className="no-print sticky top-0 left-0 right-0 bg-slate-800 text-white p-4 flex justify-between items-center z-50 shadow-md">
+          <div>
+            <h2 className="font-semibold text-lg">Preview SPK · {wo.id}</h2>
+            <p className="text-xs text-slate-300">Kertas A4 · Orientasi Potrait · Margin 1.5 cm · 1 Halaman</p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => window.close()} className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors">Tutup</button>
+            <button onClick={() => window.print()} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+              🖨️ Cetak / Simpan PDF
+            </button>
+          </div>
+        </div>
+
+        {/* Konten A4 — class spk-page dipakai di print CSS untuk paksa 1 halaman */}
+        <div className="spk-page bg-white text-black px-10 py-7 font-sans max-w-[210mm] mx-auto my-8 shadow-2xl print:shadow-none print:my-0 print:max-w-none">
+
+          {/* Header */}
+          <div className="flex items-center justify-center gap-4 border-b-2 border-black pb-3 mb-4">
+            <img src={bs.logoUrl || '/primary-logo.png'} alt="Logo" className="h-14 object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            <div className="text-center">
+              <h1 className="text-xl font-bold uppercase tracking-wide">Surat Perintah Kerja (SPK)</h1>
+              <p className="text-base font-bold">{bs.namaBengkel}</p>
+              <p className="text-xs">{bs.alamat}{bs.kota ? `, ${bs.kota}` : ''}</p>
+              <p className="text-xs">
+                {bs.telepon && `Telp: ${bs.telepon}`}
+                {bs.telepon && bs.hp && ' | '}
+                {bs.hp && `HP: ${bs.hp}`}
+              </p>
+            </div>
+          </div>
+
+          {/* Info WO */}
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <table className="w-full text-sm">
+              <tbody>
+                <tr><td className="py-0.5 w-32 font-semibold">No. SPK</td><td>: {wo.id}</td></tr>
+                <tr><td className="py-0.5 font-semibold">Tanggal Masuk</td><td>: {wo.dateIn}</td></tr>
+                <tr><td className="py-0.5 font-semibold">Pelanggan</td><td>: {wo.customer}</td></tr>
+              </tbody>
+            </table>
+            <table className="w-full text-sm">
+              <tbody>
+                <tr><td className="py-0.5 w-32 font-semibold">Teknisi</td><td>: {wo.technician}</td></tr>
+                <tr><td className="py-0.5 font-semibold">Estimasi Selesai</td><td>: {wo.estimasiSelesai}</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Detail Barang */}
+          <div className="mb-4 border border-black p-3">
+            <h2 className="font-bold mb-1 text-sm">Detail Barang:</h2>
+            <p className="text-sm"><strong>Merk / Jenis:</strong> {wo.merk}</p>
+            <p className="mt-0.5 text-sm"><strong>Kapasitas:</strong> {wo.capacity}</p>
+            <p className="mt-0.5 text-sm"><strong>Keluhan / Kondisi:</strong> {wo.keluhan}</p>
+          </div>
+
+          {/* Catatan Teknisi */}
+          <div className="mb-4 border border-black p-3" style={{ minHeight: '140px' }}>
+            <h2 className="font-bold mb-1 text-sm">Catatan Teknisi / Tindakan Perbaikan:</h2>
+          </div>
+
+          {/* Kebutuhan Material */}
+          <div className="mb-4 border border-black p-3" style={{ minHeight: '110px' }}>
+            <h2 className="font-bold mb-1 text-sm">Kebutuhan Material:</h2>
+          </div>
+
+          {/* Tanda Tangan */}
+          <div className="grid grid-cols-2 gap-8 mt-4 px-6">
+            <div className="text-center">
+              <p className="text-sm font-medium">Admin</p>
+              <div className="h-14"></div>
+              <p className="text-sm border-t border-black pt-1">(................................)</p>
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium">Teknisi</p>
+              <div className="h-14"></div>
+              <p className="text-sm border-t border-black pt-1">
+                ( {wo.technician && wo.technician !== '-' ? wo.technician : '................................'} )
+              </p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
+
+  if (type === 'surat-jalan') {
+    return (
+      <div className="min-h-screen bg-slate-200 print:bg-white">
+        <style>{`
+          @media print {
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            body { background: white !important; margin: 0; padding: 0; }
+            @page { size: A4 portrait; margin: 1.5cm; }
+            .no-print { display: none !important; }
+          }
+        `}</style>
+
+        {/* Sticky Action Bar - Not visible in print */}
+        <div className="no-print sticky top-0 left-0 right-0 bg-slate-800 text-white p-4 flex justify-between items-center z-50 shadow-md">
+          <div>
+            <h2 className="font-semibold text-lg">Preview Surat Jalan · {wo.id}</h2>
+            <p className="text-xs text-slate-300">Kertas A4 · Orientasi Potrait · Margin 1.5 cm</p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => window.close()} className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors">Tutup</button>
+            <button onClick={() => window.print()} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+              🖨️ Cetak / Simpan PDF
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white text-black p-10 font-sans max-w-[210mm] mx-auto min-h-[297mm] my-8 shadow-2xl print:shadow-none print:my-0 print:p-0 print:max-w-none">
+          <div className="flex justify-between items-start mb-8 border-b-2 border-black pb-4">
+          <div className="flex items-start gap-5">
+            <img src={bs.logoUrl || '/primary-logo.png'} alt="Logo" className="h-24 w-auto object-contain object-left" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            <div>
+              <h1 className="text-3xl font-bold font-serif tracking-wider">{bs.namaBengkel}</h1>
+              <p className="text-xs mt-1 font-semibold">{bs.alamat}{bs.kota ? `, ${bs.kota}` : ''}</p>
+              <p className="text-xs">
+                {bs.telepon && `Telp: ${bs.telepon}`}
+                {bs.telepon && bs.hp && ' | '}
+                {bs.hp && `HP: ${bs.hp}`}
+              </p>
+              {bs.email && <p className="text-xs">Email: {bs.email}</p>}
+            </div>
+          </div>
+          <div className="text-right">
+            <h2 className="text-2xl font-bold uppercase mb-2">Surat Jalan</h2>
+            <p>{bs.kota || 'Pekanbaru'}, {today}</p>
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <p>Kepada Yth,</p>
+          <p className="font-bold text-lg">{wo.customer}</p>
+          <p className="mt-2">Bersama ini kami kirimkan barang dengan rincian sebagai berikut:</p>
+        </div>
+
+        <table className="w-full border border-black mb-8">
+          <thead>
+            <tr className="border-b border-black">
+              <th className="py-2 px-3 border-r border-black text-center w-16">No.</th>
+              <th className="py-2 px-3 border-r border-black text-center w-24">Qty</th>
+              <th className="py-2 px-3 border-r border-black text-left">Nama / Deskripsi Barang</th>
+              <th className="py-2 px-3 text-left w-48">Keterangan</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="py-3 px-3 border-r border-black text-center">1</td>
+              <td className="py-3 px-3 border-r border-black text-center">1 UNIT</td>
+              <td className="py-3 px-3 border-r border-black font-semibold">{wo.merk} (Kapasitas: {wo.capacity})</td>
+              <td className="py-3 px-3">Selesai Servis (Ref: {wo.id})</td>
+            </tr>
+            {/* Empty space for filler */}
+            <tr>
+              <td className="py-12 border-r border-black"></td>
+              <td className="py-12 border-r border-black"></td>
+              <td className="py-12 border-r border-black"></td>
+              <td className="py-12"></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p className="mb-8 text-sm italic">Barang diterima dalam keadaan baik dan cukup.</p>
+
+        {/* Tanda Tangan — grid 3 kolom agar sejajar sempurna */}
+        <div className="grid grid-cols-3 gap-6 mt-2">
+
+          {/* Kolom 1: Penerima */}
+          <div className="text-center">
+            <p className="text-sm font-medium">Penerima,</p>
+            <div className="h-16 mt-2"></div>
+            <div className="border-t border-black pt-1.5">
+              <p className="text-sm">(................................)</p>
+              <p className="text-xs text-gray-600 mt-0.5">{wo.customer}</p>
+            </div>
+          </div>
+
+          {/* Kolom 2: Pengirim */}
+          <div className="text-center">
+            <p className="text-sm font-medium">Pengirim / Supir,</p>
+            <div className="h-16 mt-2"></div>
+            <div className="border-t border-black pt-1.5">
+              <p className="text-sm">(................................)</p>
+            </div>
+          </div>
+
+          {/* Kolom 3: Direktur */}
+          <div className="text-center">
+            <p className="text-xs text-gray-500">{bs.kota || 'Pekanbaru'}, {today}</p>
+            <p className="text-sm font-medium mt-0.5">Hormat Kami,</p>
+            <div className="h-16 mt-2"></div>
+            <div className="border-t border-black pt-1.5">
+              <p className="font-bold text-sm">{bs.namaPemilik || bs.namaBengkel}</p>
+              <p className="text-xs text-gray-600">{bs.jabatanPemilik || 'Direktur'}</p>
+              <p className="text-xs text-gray-600">{bs.namaBengkel}</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      </div>
+    );
+  }
+
+  return <div>Tipe cetak tidak valid.</div>;
+}
