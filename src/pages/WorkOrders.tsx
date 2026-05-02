@@ -477,27 +477,62 @@ export default function WorkOrders() {
 
               {/* Diskon */}
               <div className="bg-white border border-amber-200 rounded-lg shadow-sm p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <h4 className="font-semibold text-slate-700">Diskon</h4>
-                    <p className="text-xs text-slate-400 mt-0.5">Diskon akan mengurangi total tagihan di Invoice dan pencatatan piutang.</p>
+                <div className="mb-3">
+                  <h4 className="font-semibold text-slate-700">Diskon</h4>
+                  <p className="text-xs text-slate-400 mt-0.5">Masukkan diskon nominal (Rp) atau persentase (%) — keduanya saling terhubung otomatis.</p>
+                </div>
+                <div className="flex items-end gap-3">
+                  {/* Input Nominal Rp */}
+                  <div className="flex-1">
+                    <label className="text-xs text-slate-500 font-medium block mb-1">Nominal (Rp)</label>
+                    <div className="flex items-center border border-slate-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-amber-400">
+                      <span className="px-2.5 py-1.5 bg-slate-50 text-xs text-slate-500 border-r border-slate-300 font-medium">Rp</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={selectedWO.diskon ?? 0}
+                        onChange={e => setSelectedWO({ ...selectedWO, diskon: Math.max(0, Number(e.target.value)) })}
+                        className="flex-1 px-3 py-1.5 text-sm text-right focus:outline-none min-w-0"
+                      />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-sm text-slate-600 font-medium">Rp</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={selectedWO.diskon ?? 0}
-                      onChange={e => setSelectedWO({ ...selectedWO, diskon: Math.max(0, Number(e.target.value)) })}
-                      className="border border-slate-300 rounded-lg px-3 py-1.5 w-40 text-sm text-right focus:ring-2 focus:ring-amber-400 focus:outline-none"
-                    />
-                    {(selectedWO.diskon ?? 0) > 0 && selectedWO.estimatedCost > 0 && (
-                      <span className="text-xs text-amber-600 font-semibold bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                        {((selectedWO.diskon! / selectedWO.estimatedCost) * 100).toFixed(1)}%
-                      </span>
-                    )}
+                  <div className="text-slate-400 text-xs font-medium pb-2">atau</div>
+                  {/* Input Persentase */}
+                  <div className="w-28">
+                    <label className="text-xs text-slate-500 font-medium block mb-1">Persentase (%)</label>
+                    <div className="flex items-center border border-slate-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-amber-400">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        value={
+                          selectedWO.estimatedCost > 0
+                            ? +((((selectedWO.diskon ?? 0) / selectedWO.estimatedCost) * 100).toFixed(2))
+                            : 0
+                        }
+                        onChange={e => {
+                          const pct = Math.min(100, Math.max(0, Number(e.target.value)));
+                          setSelectedWO({ ...selectedWO, diskon: Math.round(selectedWO.estimatedCost * pct / 100) });
+                        }}
+                        className="flex-1 px-3 py-1.5 text-sm text-right focus:outline-none min-w-0 w-full"
+                      />
+                      <span className="px-2.5 py-1.5 bg-slate-50 text-xs text-slate-500 border-l border-slate-300 font-medium">%</span>
+                    </div>
                   </div>
                 </div>
+                {/* Summary setelah diskon */}
+                {(selectedWO.diskon ?? 0) > 0 && selectedWO.estimatedCost > 0 && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                    <span className="text-slate-500">Tagihan akhir:</span>
+                    <span className="line-through text-slate-400">Rp {fmt(selectedWO.estimatedCost)}</span>
+                    <span className="text-amber-500">→</span>
+                    <span className="font-bold text-slate-800">Rp {fmt(Math.max(selectedWO.estimatedCost - (selectedWO.diskon ?? 0), 0))}</span>
+                    <span className="ml-auto text-amber-700 font-semibold">
+                      hemat {(((selectedWO.diskon ?? 0) / selectedWO.estimatedCost) * 100).toFixed(1)}% · Rp {fmt(selectedWO.diskon ?? 0)}
+                    </span>
+                  </div>
+                )}
               </div>
 
             </div>

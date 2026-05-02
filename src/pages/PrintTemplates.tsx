@@ -373,7 +373,7 @@ export default function PrintTemplates() {
               {diskon > 0 && (
                 <tr>
                   <td className="py-1 px-2 border-r border-black border-b border-black text-right font-semibold text-red-700">
-                    Diskon
+                    Diskon{subtotal > 0 ? ` (${((diskon / subtotal) * 100).toFixed(1)}%)` : ''}
                   </td>
                   <td className="py-1 px-2 border-b border-black text-right font-semibold text-red-700">
                     - {fmt(diskon)}
