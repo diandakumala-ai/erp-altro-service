@@ -512,32 +512,3 @@ export default function WorkOrders() {
     </div>
   );
 }
-                    <span className="text-sm text-slate-600 font-medium">Rp</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={selectedWO.diskon ?? 0}
-                      onChange={e => setSelectedWO({ ...selectedWO, diskon: Math.max(0, Number(e.target.value)) })}
-                      className="border border-slate-300 rounded-lg px-3 py-1.5 w-40 text-sm text-right focus:ring-2 focus:ring-amber-400 focus:outline-none"
-                    />
-                    {(selectedWO.diskon ?? 0) > 0 && selectedWO.estimatedCost > 0 && (
-                      <span className="text-xs text-amber-600 font-semibold bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                        {((selectedWO.diskon! / selectedWO.estimatedCost) * 100).toFixed(1)}%
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-            </div>
-            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-3 shrink-0">
-              <button onClick={() => setSelectedWO(null)} className="px-4 py-2 border border-slate-300 bg-white text-slate-700 rounded-lg font-medium hover:bg-slate-50 text-sm">Batal</button>
-              <button onClick={handleSave} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 text-sm">Simpan & Update Biaya WO</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-    </div>
-  );
-}
