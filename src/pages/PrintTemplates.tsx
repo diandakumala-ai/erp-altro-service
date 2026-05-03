@@ -299,10 +299,10 @@ export default function PrintTemplates() {
               </div>
             </div>
             <div className="text-right text-xs">
-              <p className="font-bold text-sm uppercase tracking-wide border-b border-black pb-1 mb-2">INVOICE</p>
+              <p className="font-bold text-base uppercase tracking-wide border-b border-black pb-1 mb-2">INVOICE</p>
               <p>{bs.kota || 'Pekanbaru'}, {today}</p>
               <p className="mt-1">Kepada Yth,</p>
-              <p className="font-bold">{wo.customer}</p>
+              <p className="font-bold text-sm">{wo.customer}</p>
               <p className="mt-1">No.: <span className="font-semibold">{wo.id.replace('WO-', 'INV-')}</span></p>
             </div>
           </div>

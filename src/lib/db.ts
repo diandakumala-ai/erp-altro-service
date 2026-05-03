@@ -26,6 +26,7 @@ const toDbWo = (w: WorkOrder) => ({
   date_in: w.dateIn || null,
   estimasi_selesai: w.estimasiSelesai,
   estimated_cost: w.estimatedCost,
+  diskon: w.diskon ?? 0,
 });
 
 const fromDbWo = (r: Record<string, unknown>): WorkOrder => ({
@@ -39,6 +40,7 @@ const fromDbWo = (r: Record<string, unknown>): WorkOrder => ({
   dateIn: r.date_in as string,
   estimasiSelesai: r.estimasi_selesai as string,
   estimatedCost: r.estimated_cost as number,
+  diskon: (r.diskon as number | null) ?? 0,
 });
 
 const toDbInv = (i: InventoryItem) => ({
