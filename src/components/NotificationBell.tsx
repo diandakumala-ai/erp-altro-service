@@ -94,9 +94,9 @@ export function NotificationBell() {
       })
       .sort((a, b) => (a.severity === 'high' ? 0 : 1) - (b.severity === 'high' ? 0 : 1));
 
-    // Stok kritis
+    // Stok kritis — konsisten dengan Laporan/Export (pakai <=, bukan <)
     const stokItems: NotifItem[] = inventory
-      .filter(i => i.stok < i.batasMinimum)
+      .filter(i => i.stok <= i.batasMinimum)
       .map(i => ({
         id: `stok-${i.id}`,
         type: 'stok' as const,
@@ -107,24 +107,19 @@ export function NotificationBell() {
       }))
       .sort((a, b) => (a.severity === 'high' ? 0 : 1) - (b.severity === 'high' ? 0 : 1));
 
-    // Piutang (Belum Bayar & DP)
+    // Piutang (Belum Bayar & DP) — hitung status sekali per WO
     const piutangItems: NotifItem[] = workOrders
-      .filter(wo => {
-        if (wo.estimatedCost <= 0) return false;
-        const { status } = computeStatusBayar(wo, finance);
-        return status === 'Belum Bayar' || status === 'DP';
-      })
-      .map(wo => {
-        const { status, sisaTagihan } = computeStatusBayar(wo, finance);
-        return {
-          id: `piutang-${wo.id}`,
-          type: 'piutang' as const,
-          title: `${wo.id} — ${wo.customer}`,
-          desc: `${status} · sisa Rp ${fmt(sisaTagihan)}`,
-          to: '/finance',
-          severity: (status === 'Belum Bayar' ? 'high' : 'medium') as 'high' | 'medium',
-        };
-      })
+      .filter(wo => wo.estimatedCost > 0)
+      .map(wo => ({ wo, info: computeStatusBayar(wo, finance) }))
+      .filter(({ info }) => info.status === 'Belum Bayar' || info.status === 'DP')
+      .map(({ wo, info }) => ({
+        id: `piutang-${wo.id}`,
+        type: 'piutang' as const,
+        title: `${wo.id} — ${wo.customer}`,
+        desc: `${info.status} · sisa Rp ${fmt(info.sisaTagihan)}`,
+        to: '/finance',
+        severity: (info.status === 'Belum Bayar' ? 'high' : 'medium') as 'high' | 'medium',
+      }))
       .sort((a, b) => (a.severity === 'high' ? 0 : 1) - (b.severity === 'high' ? 0 : 1))
       .slice(0, 10);
 
@@ -134,42 +129,66 @@ export function NotificationBell() {
   const totalCount = overdueItems.length + stokItems.length + piutangItems.length;
 
   // Calculate dropdown position from button's bounding rect
-  const openDropdown = useCallback(() => {
-    if (!btnRef.current) return;
+  const DROPDOWN_W = 320; // sesuai class w-80
+  const computePosition = useCallback(() => {
+    if (!btnRef.current) return null;
     const rect = btnRef.current.getBoundingClientRect();
     const dropH = Math.min(480, window.innerHeight - 32);
     const top = rect.bottom + rect.top - dropH > 16
       ? rect.bottom - dropH  // anchor bottom to button bottom
       : rect.top;            // or open downward if near top
-    setDropPos({
+    // Clamp horizontal: kalau bell di kanan layar, dropdown ke kiri bell.
+    let left = rect.right + 12;
+    if (left + DROPDOWN_W > window.innerWidth - 8) {
+      left = Math.max(8, rect.left - DROPDOWN_W - 12);
+    }
+    return {
       top: Math.max(8, Math.min(top, window.innerHeight - dropH - 8)),
-      left: rect.right + 12,
-    });
-    setOpen(true);
+      left,
+    };
   }, []);
+
+  const openDropdown = useCallback(() => {
+    const pos = computePosition();
+    if (pos) {
+      setDropPos(pos);
+      setOpen(true);
+    }
+  }, [computePosition]);
 
   const close = useCallback(() => setOpen(false), []);
 
-  // Close on outside click / scroll
+  // Close on outside click / page-level scroll, reposition on resize
   useEffect(() => {
     if (!open) return;
+    const dropEl = () => document.getElementById('notif-dropdown');
     const handler = (e: MouseEvent | TouchEvent) => {
       const target = e.target as Node;
       // Keep open if clicking inside the dropdown (portal) or the button
-      const dropEl = document.getElementById('notif-dropdown');
-      if (btnRef.current?.contains(target) || dropEl?.contains(target)) return;
+      if (btnRef.current?.contains(target) || dropEl()?.contains(target)) return;
       close();
     };
-    const onScroll = () => close();
+    const onScroll = (e: Event) => {
+      // Jangan tutup kalau user scroll DI DALAM dropdown (list panjang)
+      const target = e.target as Node | null;
+      if (target && dropEl()?.contains(target)) return;
+      close();
+    };
+    const onResize = () => {
+      const pos = computePosition();
+      if (pos) setDropPos(pos);
+    };
     document.addEventListener('mousedown', handler);
     document.addEventListener('touchstart', handler);
     window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    window.addEventListener('resize', onResize);
     return () => {
       document.removeEventListener('mousedown', handler);
       document.removeEventListener('touchstart', handler);
       window.removeEventListener('scroll', onScroll, { capture: true });
+      window.removeEventListener('resize', onResize);
     };
-  }, [open, close]);
+  }, [open, close, computePosition]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (

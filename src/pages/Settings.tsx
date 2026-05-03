@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Save, Building2, User, Phone, Mail, MapPin, FileText, Eye, Upload, Trash2 } from 'lucide-react';
+import { Save, Building2, User, Phone, Mail, MapPin, FileText, Eye, EyeOff, Upload, Trash2, Lock, Loader2, ShieldCheck } from 'lucide-react';
 import { useStore, type BengkelSettings } from '../store/useStore';
 import { toast } from '../lib/toast';
+import { supabase } from '../lib/supabase';
 
 function FormField({
   label, value, onChange, placeholder, icon: Icon, hint,
@@ -99,6 +100,190 @@ function KopSuratPreview({ s }: { s: BengkelSettings }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Panel ganti password (re-auth dulu, lalu update) ────────────
+function PasswordChangePanel() {
+  const [oldPwd, setOldPwd] = useState('');
+  const [newPwd, setNewPwd] = useState('');
+  const [confirmPwd, setConfirmPwd] = useState('');
+  const [showOld, setShowOld] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  // Validasi kekuatan password
+  const lenOk = newPwd.length >= 12;
+  const hasLetter = /[A-Za-z]/.test(newPwd);
+  const hasNumber = /\d/.test(newPwd);
+  const hasSymbol = /[^A-Za-z0-9]/.test(newPwd);
+  const strengthOk = lenOk && hasLetter && hasNumber && hasSymbol;
+  const matchOk = newPwd.length > 0 && newPwd === confirmPwd;
+  const differentOk = newPwd !== oldPwd;
+  const canSubmit = oldPwd.length > 0 && strengthOk && matchOk && differentOk && !loading;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setLoading(true);
+
+    // Verifikasi password lama dulu (re-auth) — Supabase JS tidak melakukannya
+    // otomatis di updateUser, jadi kalau session attacker hijack, password lama
+    // tetap diperlukan untuk ganti.
+    const { data: userData, error: userErr } = await supabase.auth.getUser();
+    const email = userData?.user?.email;
+    if (userErr || !email) {
+      toast.error('Sesi tidak valid. Silakan login ulang.');
+      setLoading(false);
+      return;
+    }
+
+    const { error: verifyErr } = await supabase.auth.signInWithPassword({
+      email,
+      password: oldPwd,
+    });
+    if (verifyErr) {
+      toast.error('Password lama salah.');
+      setLoading(false);
+      return;
+    }
+
+    const { error: updateErr } = await supabase.auth.updateUser({ password: newPwd });
+    if (updateErr) {
+      toast.error(`Gagal mengganti password: ${updateErr.message}`);
+      setLoading(false);
+      return;
+    }
+
+    toast.success('Password berhasil diganti.');
+    setOldPwd('');
+    setNewPwd('');
+    setConfirmPwd('');
+    setLoading(false);
+  };
+
+  const Req = ({ ok, children }: { ok: boolean; children: React.ReactNode }) => (
+    <li className={`flex items-center gap-1.5 ${ok ? 'text-green-600' : 'text-slate-400'}`}>
+      <span className={`inline-block w-1.5 h-1.5 rounded-full ${ok ? 'bg-green-500' : 'bg-slate-300'}`} />
+      {children}
+    </li>
+  );
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+        <div className="w-7 h-7 bg-rose-50 rounded-lg flex items-center justify-center">
+          <ShieldCheck className="w-4 h-4 text-rose-600" />
+        </div>
+        <h3 className="text-sm font-semibold text-slate-800">Akun & Keamanan</h3>
+        <span className="ml-auto text-[11px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Ganti Password</span>
+      </div>
+      <form onSubmit={handleSubmit} className="p-6 grid grid-cols-2 gap-5">
+        {/* Password lama */}
+        <div className="col-span-2">
+          <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+            <Lock className="w-3.5 h-3.5 text-slate-400" />
+            Password Lama
+          </label>
+          <div className="relative">
+            <input
+              type={showOld ? 'text' : 'password'}
+              value={oldPwd}
+              onChange={e => setOldPwd(e.target.value)}
+              autoComplete="current-password"
+              placeholder="Masukkan password lama"
+              className="w-full px-3 py-2 pr-10 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-300 focus:border-rose-400 bg-white"
+            />
+            <button
+              type="button"
+              onClick={() => setShowOld(v => !v)}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              aria-label={showOld ? 'Sembunyikan password' : 'Tampilkan password'}
+            >
+              {showOld ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Password baru */}
+        <div>
+          <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+            <Lock className="w-3.5 h-3.5 text-slate-400" />
+            Password Baru
+          </label>
+          <div className="relative">
+            <input
+              type={showNew ? 'text' : 'password'}
+              value={newPwd}
+              onChange={e => setNewPwd(e.target.value)}
+              autoComplete="new-password"
+              placeholder="Minimal 12 karakter"
+              className="w-full px-3 py-2 pr-10 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-300 focus:border-rose-400 bg-white"
+            />
+            <button
+              type="button"
+              onClick={() => setShowNew(v => !v)}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              aria-label={showNew ? 'Sembunyikan password' : 'Tampilkan password'}
+            >
+              {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Konfirmasi password baru */}
+        <div>
+          <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+            <Lock className="w-3.5 h-3.5 text-slate-400" />
+            Ulangi Password Baru
+          </label>
+          <input
+            type={showNew ? 'text' : 'password'}
+            value={confirmPwd}
+            onChange={e => setConfirmPwd(e.target.value)}
+            autoComplete="new-password"
+            placeholder="Ketik ulang password baru"
+            className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 bg-white ${
+              confirmPwd.length === 0
+                ? 'border-slate-200 focus:ring-rose-300 focus:border-rose-400'
+                : matchOk
+                ? 'border-green-300 focus:ring-green-300 focus:border-green-400'
+                : 'border-red-300 focus:ring-red-300 focus:border-red-400'
+            }`}
+          />
+        </div>
+
+        {/* Indikator kekuatan password */}
+        {newPwd.length > 0 && (
+          <div className="col-span-2 bg-slate-50 rounded-lg border border-slate-200 px-3 py-2.5">
+            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Syarat password baru</p>
+            <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+              <Req ok={lenOk}>Minimal 12 karakter</Req>
+              <Req ok={hasLetter}>Mengandung huruf</Req>
+              <Req ok={hasNumber}>Mengandung angka</Req>
+              <Req ok={hasSymbol}>Mengandung simbol (!@#…)</Req>
+              <Req ok={differentOk}>Berbeda dari password lama</Req>
+              <Req ok={matchOk}>Konfirmasi cocok</Req>
+            </ul>
+          </div>
+        )}
+
+        <div className="col-span-2 flex justify-end">
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors shadow-sm ${
+              canSubmit
+                ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+            }`}
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+            {loading ? 'Memproses...' : 'Ganti Password'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -307,6 +492,9 @@ export default function Settings() {
               hint="Ditampilkan di bawah nama pada kolom tanda tangan."
             />
           </Section>
+
+          {/* Akun & Keamanan */}
+          <PasswordChangePanel />
 
           {/* Preview */}
           <KopSuratPreview s={form} />

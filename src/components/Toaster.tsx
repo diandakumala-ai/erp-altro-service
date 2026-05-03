@@ -39,8 +39,9 @@ export function Toaster() {
               <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${cls}`} />
               <p className="text-sm text-slate-700 font-medium flex-1">{t.message}</p>
               <button
-                onClick={() => {/* dismiss handled by timeout */}}
+                onClick={() => toast.dismiss(t.id)}
                 className="text-slate-300 hover:text-slate-500 transition-colors shrink-0"
+                aria-label="Tutup notifikasi"
               >
                 <X className="w-3.5 h-3.5" />
               </button>

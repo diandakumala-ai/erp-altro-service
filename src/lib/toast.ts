@@ -34,6 +34,11 @@ export const toast = {
       toasts = toasts.filter(t => t.id !== id);
       notify();
     }, duration);
+    return id;
+  },
+  dismiss(id: string) {
+    toasts = toasts.filter(t => t.id !== id);
+    notify();
   },
   success: (msg: string) => toast.show(msg, 'success'),
   error: (msg: string) => toast.show(msg, 'error', 5000),
