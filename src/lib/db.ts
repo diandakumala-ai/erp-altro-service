@@ -172,7 +172,7 @@ export async function isDatabaseEmpty(): Promise<boolean> {
     .from('work_orders')
     .select('*', { count: 'exact', head: true });
   if (error) {
-    console.error('[DB] isDatabaseEmpty error:', error);
+    if (import.meta.env.DEV) console.error('[DB] isDatabaseEmpty error:', error);
     return false; // Anggap tidak kosong kalau ada error
   }
   return (count ?? 0) === 0;
@@ -193,7 +193,7 @@ async function chunkUpsert<T>(
   for (let i = 0; i < mapped.length; i += CHUNK) {
     const batch = mapped.slice(i, i + CHUNK);
     const { error } = await supabase.from(table).upsert(batch);
-    if (error) console.error(`[DB] seed ${table} batch ${i} error:`, error);
+    if (error && import.meta.env.DEV) console.error(`[DB] seed ${table} batch ${i} error:`, error);
   }
 }
 
@@ -212,7 +212,7 @@ export interface SeedData {
  * baru boms & services (referensi wo_id).
  */
 export async function seedDatabase(data: SeedData): Promise<void> {
-  console.log('[DB] Mulai seeding database ke Supabase...');
+  if (import.meta.env.DEV) console.log('[DB] Mulai seeding database ke Supabase...');
 
   // Tahap 1: tabel tanpa foreign key
   await Promise.all([
@@ -230,7 +230,7 @@ export async function seedDatabase(data: SeedData): Promise<void> {
     chunkUpsert('services', data.services, toDbSvc),
   ]);
 
-  console.log('[DB] Seeding selesai ✓');
+  if (import.meta.env.DEV) console.log('[DB] Seeding selesai ✓');
 }
 
 // ─── LOAD SEMUA DATA ─────────────────────────────────────────
@@ -266,7 +266,7 @@ export async function loadSettings(): Promise<BengkelSettings | null> {
     .eq('id', 'bengkel')
     .maybeSingle();
   if (error) {
-    console.error('[DB] loadSettings error:', error);
+    if (import.meta.env.DEV) console.error('[DB] loadSettings error:', error);
     return null;
   }
   if (!data) return null;
@@ -282,11 +282,11 @@ async function exec(label: string, query: PromiseLike<{ error: any }>) {
   try {
     const { error } = await Promise.resolve(query);
     if (error) {
-      console.error('[DB] ' + label + ' error:', error);
+      if (import.meta.env.DEV) console.error('[DB] ' + label + ' error:', error);
       toast.error(`Gagal menyimpan data (${label}). Periksa koneksi internet.`);
     }
   } catch (err) {
-    console.error('[DB] ' + label + ' exception:', err);
+    if (import.meta.env.DEV) console.error('[DB] ' + label + ' exception:', err);
     toast.error('Koneksi ke database terputus. Data mungkin belum tersimpan.');
   }
 }

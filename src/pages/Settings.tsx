@@ -180,24 +180,40 @@ export default function Settings() {
                     <label className="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 cursor-pointer flex items-center gap-2 transition-colors">
                       <Upload className="w-4 h-4" />
                       Upload Logo
-                      <input 
-                        type="file" 
-                        accept="image/png, image/jpeg, image/webp" 
-                        className="hidden" 
-                        onChange={(e) => {
+                      <input
+                        type="file"
+                        accept="image/png, image/jpeg, image/webp"
+                        className="hidden"
+                        onChange={async (e) => {
                           const file = e.target.files?.[0];
-                          if (file) {
-                            if (file.size > 2 * 1024 * 1024) {
-                              toast.error('Ukuran file maksimal 2MB');
-                              return;
-                            }
-                            const reader = new FileReader();
-                            reader.onload = (ev) => {
-                              update('logoUrl', ev.target?.result as string);
-                            };
-                            reader.readAsDataURL(file);
+                          if (!file) return;
+                          if (file.size > 2 * 1024 * 1024) {
+                            toast.error('Ukuran file maksimal 2MB');
+                            return;
                           }
-                        }} 
+                          // Cek MIME yang dilaporkan browser
+                          const allowedMime = ['image/png', 'image/jpeg', 'image/webp'];
+                          if (!allowedMime.includes(file.type)) {
+                            toast.error('Format file tidak didukung. Pakai PNG, JPG, atau WebP.');
+                            return;
+                          }
+                          // Verifikasi magic bytes — cegah upload file disguised
+                          const head = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+                          const isPng = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4E && head[3] === 0x47;
+                          const isJpg = head[0] === 0xFF && head[1] === 0xD8 && head[2] === 0xFF;
+                          const isWebp =
+                            head[0] === 0x52 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x46 &&
+                            head[8] === 0x57 && head[9] === 0x45 && head[10] === 0x42 && head[11] === 0x50;
+                          if (!isPng && !isJpg && !isWebp) {
+                            toast.error('Isi file tidak valid sebagai gambar.');
+                            return;
+                          }
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            update('logoUrl', ev.target?.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }}
                       />
                     </label>
                     {form.logoUrl && (

@@ -1,5 +1,18 @@
 import fs from 'fs';
+import vm from 'vm';
 import { createClient } from '@supabase/supabase-js';
+
+// ─── SCRIPT SEED LEGACY (one-shot, dijalankan manual) ─────────
+// Membaca array `_legacyInventory` & `_legacyCustomers` dari source TS,
+// lalu upsert ke Supabase. Kredensial WAJIB dari env, tidak boleh hardcoded.
+//
+// Cara pakai (PowerShell):
+//   $env:VITE_SUPABASE_URL="..."; $env:VITE_SUPABASE_ANON_KEY="...";
+//   $env:SUPABASE_ADMIN_EMAIL="..."; $env:SUPABASE_ADMIN_PASSWORD="...";
+//   node export-to-supabase.js
+//
+// Lebih disarankan: pakai SUPABASE_SERVICE_ROLE_KEY (bypass RLS) lalu
+// tidak perlu signInWithPassword sama sekali.
 
 const content = fs.readFileSync('src/store/useStore.ts', 'utf-8');
 
@@ -21,20 +34,27 @@ function extractArray(arrayName) {
     }
   }
   const arrayStr = content.substring(startIndex, endIndex);
-  return eval('(' + arrayStr + ')');
+  // Pakai vm.runInNewContext: tetap evaluasi literal JS, tapi di sandbox
+  // tanpa akses ke require/process/global — lebih aman dari eval().
+  return vm.runInNewContext('(' + arrayStr + ')', Object.create(null), {
+    timeout: 1000,
+  });
 }
 
 const inventory = extractArray('_legacyInventory');
 const customers = extractArray('_legacyCustomers');
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const ADMIN_EMAIL = process.env.SUPABASE_ADMIN_EMAIL;
+const ADMIN_PASSWORD = process.env.SUPABASE_ADMIN_PASSWORD;
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error("Missing Supabase credentials in .env");
+  console.error('Missing VITE_SUPABASE_URL atau VITE_SUPABASE_ANON_KEY (atau SUPABASE_SERVICE_ROLE_KEY) di env.');
   process.exit(1);
 }
 
+const usingServiceRole = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 async function seed() {
@@ -57,17 +77,25 @@ async function seed() {
     total_wo: c.totalWo
   }));
 
-  console.log('Melakukan login admin untuk melewati RLS...');
-  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-    email: 'admin@altroservice.com',
-    password: '4dm1n4ltr0',
-  });
-
-  if (authError) {
-    console.error('Gagal login ke Supabase:', authError.message);
-    return;
+  if (usingServiceRole) {
+    console.log('Pakai service-role key — bypass RLS tanpa login.');
+  } else {
+    if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
+      console.error('Pakai anon key tanpa SUPABASE_ADMIN_EMAIL & SUPABASE_ADMIN_PASSWORD di env.');
+      console.error('Set keduanya, atau pakai SUPABASE_SERVICE_ROLE_KEY untuk bypass RLS.');
+      process.exit(1);
+    }
+    console.log('Login admin untuk melewati RLS...');
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: ADMIN_EMAIL,
+      password: ADMIN_PASSWORD,
+    });
+    if (authError) {
+      console.error('Gagal login ke Supabase:', authError.message);
+      return;
+    }
+    console.log('Login berhasil! Token:', authData.session?.access_token ? 'OK' : 'FAIL');
   }
-  console.log('Login berhasil! Token:', authData.session?.access_token ? 'OK' : 'FAIL');
 
   console.log(`Menyiapkan ${mappedInventory.length} data inventory...`);
   if (mappedInventory.length > 0) {

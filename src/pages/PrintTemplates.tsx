@@ -3,6 +3,10 @@ import { useStore, computeStatusBayar } from '../store/useStore';
 
 const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(n);
 
+const VALID_TYPES = ['invoice', 'spk', 'surat-jalan', 'laporan-keuangan'] as const;
+const VALID_ID = /^[A-Za-z0-9_-]{1,32}$/;
+const VALID_PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/;
+
 export default function PrintTemplates() {
   const { type, id } = useParams();
 
@@ -11,6 +15,24 @@ export default function PrintTemplates() {
   const services = useStore(s => s.services);
   const finance = useStore(s => s.finance);
   const bs = useStore(s => s.bengkelSettings);
+
+  // Whitelist tipe & format ID — cegah path/query manipulation
+  if (!VALID_TYPES.includes(type as typeof VALID_TYPES[number])) {
+    return (
+      <div className="p-10 text-center">
+        <h2>Tipe cetak tidak valid.</h2>
+        <button onClick={() => window.close()} className="mt-4 text-indigo-600 underline">Tutup tab ini</button>
+      </div>
+    );
+  }
+  if (id && !VALID_ID.test(id)) {
+    return (
+      <div className="p-10 text-center">
+        <h2>ID tidak valid.</h2>
+        <button onClick={() => window.close()} className="mt-4 text-indigo-600 underline">Tutup tab ini</button>
+      </div>
+    );
+  }
 
   const wo = workOrders.find(w => w.id === id);
   const woBoms = boms.filter(b => b.woId === id);
@@ -24,7 +46,9 @@ export default function PrintTemplates() {
   // ─── LAPORAN KEUANGAN ──────────────────────────────────────────────────────
   if (type === 'laporan-keuangan') {
     const params = new URLSearchParams(window.location.search);
-    const period = params.get('period') || '';
+    const periodRaw = params.get('period') || '';
+    // Hanya terima format YYYY-MM (01..12). Selain itu fallback ke "semua periode".
+    const period = VALID_PERIOD.test(periodRaw) ? periodRaw : '';
 
     const trxFiltered = period
       ? finance.filter(t => t.tanggal.startsWith(period))
