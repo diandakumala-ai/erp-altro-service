@@ -359,7 +359,7 @@ export default function PrintTemplates() {
             <tfoot>
               {/* Pembayaran + Jumlah */}
               <tr className="border-t border-black">
-                <td colSpan={3} className="py-1.5 px-2 border-r border-black align-top text-[10px]" rowSpan={diskon > 0 ? 4 : 3}>
+                <td colSpan={3} className="py-1.5 px-2 border-r border-black align-top text-[10px]" rowSpan={diskon > 0 ? 3 : 2}>
                   <p className="font-semibold mb-0.5">Pembayaran dapat ditransfer ke:</p>
                   <p>BANK MANDIRI A/N SUWALDI</p>
                   <p>No.Rek 108-00-1007188-5</p>
@@ -382,14 +382,8 @@ export default function PrintTemplates() {
               )}
               {/* Total */}
               <tr>
-                <td className="py-1.5 px-2 border-r border-black border-b border-black text-right font-bold text-sm">Total</td>
-                <td className="py-1.5 px-2 border-b border-black text-right font-bold text-sm">{fmt(grandTotal)}</td>
-              </tr>
-              {/* Terbilang */}
-              <tr>
-                <td colSpan={2} className="py-1 px-2 text-right text-[10px] text-slate-500 italic" style={{ borderRight: 'none' }}>
-                  &nbsp;
-                </td>
+                <td className="py-1.5 px-2 border-r border-black text-right font-bold text-sm">Total</td>
+                <td className="py-1.5 px-2 text-right font-bold text-sm">{fmt(grandTotal)}</td>
               </tr>
             </tfoot>
           </table>
