@@ -493,11 +493,11 @@ export default function Settings() {
             />
           </Section>
 
-          {/* Akun & Keamanan */}
-          <PasswordChangePanel />
-
           {/* Preview */}
           <KopSuratPreview s={form} />
+
+          {/* Akun & Keamanan */}
+          <PasswordChangePanel />
 
           {/* Info */}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-700">
