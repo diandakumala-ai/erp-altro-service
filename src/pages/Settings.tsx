@@ -3,6 +3,7 @@ import { Save, Building2, User, Phone, Mail, MapPin, FileText, Eye, EyeOff, Uplo
 import { useStore, type BengkelSettings } from '../store/useStore';
 import { toast } from '../lib/toast';
 import { supabase } from '../lib/supabase';
+import { Button, Section as UISection } from '../components/ui';
 
 function FormField({
   label, value, onChange, placeholder, icon: Icon, hint,
@@ -25,40 +26,26 @@ function FormField({
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 bg-white placeholder:text-slate-300"
+        className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus:border-indigo-400 bg-white placeholder:text-slate-300"
       />
-      {hint && <p className="text-[11px] text-slate-400">{hint}</p>}
+      {hint && <p className="text-tiny text-slate-400">{hint}</p>}
     </div>
   );
 }
 
-function Section({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) {
+/** Wrapper Section local — pakai shared UISection dengan grid 2 kolom default. */
+function Section({ title, icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
-        <div className="w-7 h-7 bg-indigo-50 rounded-lg flex items-center justify-center">
-          <Icon className="w-4 h-4 text-indigo-600" />
-        </div>
-        <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
-      </div>
-      <div className="p-6 grid grid-cols-2 gap-5">
-        {children}
-      </div>
-    </div>
+    <UISection title={title} icon={icon} bodyClassName="p-6 grid grid-cols-2 gap-5">
+      {children}
+    </UISection>
   );
 }
 
 function KopSuratPreview({ s }: { s: BengkelSettings }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
-        <div className="w-7 h-7 bg-emerald-50 rounded-lg flex items-center justify-center">
-          <Eye className="w-4 h-4 text-emerald-600" />
-        </div>
-        <h3 className="text-sm font-semibold text-slate-800">Preview Kop Surat</h3>
-        <span className="ml-auto text-[11px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Tampilan di print / PDF</span>
-      </div>
-      <div className="p-6">
+    <UISection title="Preview Kop Surat" icon={Eye} accent="emerald"
+      rightSlot={<span className="text-tiny text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Tampilan di print / PDF</span>}>
         <div className="border border-slate-200 rounded-lg p-5 bg-slate-50">
           {/* Kop Surat Preview */}
           <div className="flex items-center justify-between border-b-2 border-slate-800 pb-4 mb-4">
@@ -73,14 +60,14 @@ function KopSuratPreview({ s }: { s: BengkelSettings }) {
               </div>
               <div>
                 <p className="text-base font-black text-slate-900 leading-tight">{s.namaBengkel || 'Nama Bengkel'}</p>
-                <p className="text-[11px] text-slate-500">{s.alamat}{s.kota ? `, ${s.kota}` : ''}</p>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-tiny text-slate-500">{s.alamat}{s.kota ? `, ${s.kota}` : ''}</p>
+                <p className="text-tiny text-slate-500">
                   {s.telepon && `Telp: ${s.telepon}`}
                   {s.telepon && s.hp && ' | '}
                   {s.hp && `HP: ${s.hp}`}
                 </p>
-                {s.email && <p className="text-[11px] text-slate-500">Email: {s.email}</p>}
-                {s.npwp && <p className="text-[11px] text-slate-500">NPWP: {s.npwp}</p>}
+                {s.email && <p className="text-tiny text-slate-500">Email: {s.email}</p>}
+                {s.npwp && <p className="text-tiny text-slate-500">NPWP: {s.npwp}</p>}
               </div>
             </div>
             <div className="text-right text-xs text-slate-500">
@@ -99,8 +86,17 @@ function KopSuratPreview({ s }: { s: BengkelSettings }) {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </UISection>
+  );
+}
+
+// Indikator persyaratan password — di-lift keluar agar tidak re-create tiap render.
+function Req({ ok, children }: { ok: boolean; children: React.ReactNode }) {
+  return (
+    <li className={`flex items-center gap-1.5 ${ok ? 'text-emerald-600' : 'text-slate-400'}`}>
+      <span className={`inline-block w-1.5 h-1.5 rounded-full ${ok ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+      {children}
+    </li>
   );
 }
 
@@ -163,22 +159,10 @@ function PasswordChangePanel() {
     setLoading(false);
   };
 
-  const Req = ({ ok, children }: { ok: boolean; children: React.ReactNode }) => (
-    <li className={`flex items-center gap-1.5 ${ok ? 'text-green-600' : 'text-slate-400'}`}>
-      <span className={`inline-block w-1.5 h-1.5 rounded-full ${ok ? 'bg-green-500' : 'bg-slate-300'}`} />
-      {children}
-    </li>
-  );
-
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
-        <div className="w-7 h-7 bg-rose-50 rounded-lg flex items-center justify-center">
-          <ShieldCheck className="w-4 h-4 text-rose-600" />
-        </div>
-        <h3 className="text-sm font-semibold text-slate-800">Akun & Keamanan</h3>
-        <span className="ml-auto text-[11px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Ganti Password</span>
-      </div>
+    <UISection title="Akun & Keamanan" icon={ShieldCheck} accent="rose"
+      rightSlot={<span className="text-tiny text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Ganti Password</span>}
+      bodyClassName="p-0">
       <form onSubmit={handleSubmit} className="p-6 grid grid-cols-2 gap-5">
         {/* Password lama */}
         <div className="col-span-2">
@@ -193,13 +177,13 @@ function PasswordChangePanel() {
               onChange={e => setOldPwd(e.target.value)}
               autoComplete="current-password"
               placeholder="Masukkan password lama"
-              className="w-full px-3 py-2 pr-10 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-300 focus:border-rose-400 bg-white"
+              className="w-full px-3 py-2 pr-10 text-sm border border-slate-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 focus:border-red-400 bg-white"
             />
             <button
               type="button"
               onClick={() => setShowOld(v => !v)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              aria-label={showOld ? 'Sembunyikan password' : 'Tampilkan password'}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 rounded"
+              aria-label={showOld ? 'Sembunyikan password lama' : 'Tampilkan password lama'}
             >
               {showOld ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
@@ -219,13 +203,13 @@ function PasswordChangePanel() {
               onChange={e => setNewPwd(e.target.value)}
               autoComplete="new-password"
               placeholder="Minimal 12 karakter"
-              className="w-full px-3 py-2 pr-10 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-300 focus:border-rose-400 bg-white"
+              className="w-full px-3 py-2 pr-10 text-sm border border-slate-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 focus:border-red-400 bg-white"
             />
             <button
               type="button"
               onClick={() => setShowNew(v => !v)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              aria-label={showNew ? 'Sembunyikan password' : 'Tampilkan password'}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 rounded"
+              aria-label={showNew ? 'Sembunyikan password baru' : 'Tampilkan password baru'}
             >
               {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
@@ -244,12 +228,12 @@ function PasswordChangePanel() {
             onChange={e => setConfirmPwd(e.target.value)}
             autoComplete="new-password"
             placeholder="Ketik ulang password baru"
-            className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 bg-white ${
+            className={`w-full px-3 py-2 text-sm border rounded-lg focus-visible:outline-none focus-visible:ring-2 bg-white ${
               confirmPwd.length === 0
-                ? 'border-slate-200 focus:ring-rose-300 focus:border-rose-400'
+                ? 'border-slate-200 focus-visible:ring-red-300 focus:border-red-400'
                 : matchOk
-                ? 'border-green-300 focus:ring-green-300 focus:border-green-400'
-                : 'border-red-300 focus:ring-red-300 focus:border-red-400'
+                ? 'border-emerald-300 focus-visible:ring-emerald-300 focus:border-emerald-400'
+                : 'border-red-300 focus-visible:ring-red-300 focus:border-red-400'
             }`}
           />
         </div>
@@ -257,7 +241,7 @@ function PasswordChangePanel() {
         {/* Indikator kekuatan password */}
         {newPwd.length > 0 && (
           <div className="col-span-2 bg-slate-50 rounded-lg border border-slate-200 px-3 py-2.5">
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Syarat password baru</p>
+            <p className="text-tiny font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Syarat password baru</p>
             <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
               <Req ok={lenOk}>Minimal 12 karakter</Req>
               <Req ok={hasLetter}>Mengandung huruf</Req>
@@ -270,21 +254,13 @@ function PasswordChangePanel() {
         )}
 
         <div className="col-span-2 flex justify-end">
-          <button
-            type="submit"
-            disabled={!canSubmit}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors shadow-sm ${
-              canSubmit
-                ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-            }`}
-          >
+          <Button type="submit" variant="danger" size="md" disabled={!canSubmit}>
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
             {loading ? 'Memproses...' : 'Ganti Password'}
-          </button>
+          </Button>
         </div>
       </form>
-    </div>
+    </UISection>
   );
 }
 
@@ -318,25 +294,14 @@ export default function Settings() {
         <h2 className="text-base font-semibold text-slate-800">Pengaturan Sistem</h2>
         <div className="flex items-center gap-2">
           {dirty && (
-            <button
-              onClick={handleReset}
-              className="px-3 py-1.5 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-            >
+            <Button variant="secondary" onClick={handleReset}>
               Batalkan Perubahan
-            </button>
+            </Button>
           )}
-          <button
-            onClick={handleSave}
-            disabled={!dirty}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg font-medium text-sm transition-colors shadow-sm ${
-              dirty
-                ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-            }`}
-          >
+          <Button variant="primary" onClick={handleSave} disabled={!dirty}>
             <Save className="w-4 h-4" />
             Simpan Pengaturan
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -402,16 +367,13 @@ export default function Settings() {
                       />
                     </label>
                     {form.logoUrl && (
-                      <button 
-                        onClick={() => update('logoUrl', '')}
-                        className="px-3 py-1.5 bg-red-50 text-red-600 border border-red-100 rounded-lg text-sm font-medium hover:bg-red-100 flex items-center gap-2 transition-colors"
-                      >
+                      <Button variant="soft-danger" onClick={() => update('logoUrl', '')}>
                         <Trash2 className="w-4 h-4" />
                         Hapus
-                      </button>
+                      </Button>
                     )}
                   </div>
-                  <p className="text-[11px] text-slate-500">Format: JPG, PNG, WEBP. Maks 2MB. Disarankan rasio kotak / horizontal.</p>
+                  <p className="text-tiny text-slate-500">Format: JPG, PNG, WEBP. Maks 2MB. Disarankan rasio kotak / horizontal.</p>
                 </div>
               </div>
             </div>

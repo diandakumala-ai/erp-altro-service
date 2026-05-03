@@ -20,7 +20,7 @@ const STATUS_CONFIG: Record<string, { bg: string; icon: React.ElementType }> = {
 export function StatusPill({ status, size = 'sm' }: { status: string; size?: 'xs' | 'sm' }) {
   const cfg = STATUS_CONFIG[status] ?? { bg: 'bg-slate-100 text-slate-600', icon: Clock };
   const Icon = cfg.icon;
-  const textSize = size === 'xs' ? 'text-[10px]' : 'text-xs';
+  const textSize = size === 'xs' ? 'text-2xs' : 'text-xs';
   const iconSize = size === 'xs' ? 'w-2.5 h-2.5' : 'w-3 h-3';
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold ${textSize} ${cfg.bg}`}>
@@ -218,7 +218,7 @@ export default function Dashboard() {
                       style={{ height: `${maxChart > 0 ? (d.pengeluaran / maxChart) * 100 : 0}%`, minHeight: d.pengeluaran > 0 ? '4px' : '0' }}
                     />
                   </div>
-                  <span className="text-[10px] text-slate-400 font-medium">{d.label}</span>
+                  <span className="text-2xs text-slate-400 font-medium">{d.label}</span>
                 </div>
               ))}
             </div>

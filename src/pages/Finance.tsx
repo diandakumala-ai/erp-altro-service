@@ -1,48 +1,18 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Plus, Trash2, Search, Download, X, ChevronDown, FileText, BarChart2, BellRing, Printer, Wallet, FileSpreadsheet } from 'lucide-react';
+import { Plus, Trash2, Search, Download, X, ChevronDown, FileText, BarChart2, BellRing, Printer, Wallet, FileSpreadsheet, Filter as FilterIcon } from 'lucide-react';
 import { useStore, computeStatusBayar, type FinanceTransaction } from '../store/useStore';
 import { exportBukuKas, exportLaporanBulanan, exportPiutang, exportLaporanLengkap } from '../lib/exportExcel';
 import { toast } from '../lib/toast';
-
-type SortDir = 'asc' | 'desc';
+import { Button, DataHeader, DataCell, EmptyRow, type SortDir } from '../components/ui';
 
 const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(Math.abs(n));
-
-function ThCell({ label, field, sortField, sortDir, onSort, w }: {
-  label: string; field?: string; sortField: string | null; sortDir: SortDir; onSort: (f: string) => void; w?: string;
-}) {
-  const active = sortField === field;
-  return (
-    <th onClick={() => field && onSort(field)}
-      className={`px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap select-none ${field ? 'cursor-pointer hover:bg-slate-100' : ''} ${w ?? ''}`}>
-      {label}
-      {field && <span className={`ml-1 ${active ? 'text-indigo-500' : 'text-slate-300'}`}>{active ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>}
-    </th>
-  );
-}
-
-function EditableCell({ value, onSave, type = 'text', placeholder = '...' }: { value: string; onSave: (v: string) => void; type?: string; placeholder?: string }) {
-  const [editing, setEditing] = useState(false);
-  const [val, setVal] = useState(value || '');
-  return editing ? (
-    <input aria-label="Edit" title="Edit" autoFocus type={type} placeholder={placeholder}
-      className="w-full border border-indigo-400 rounded px-1.5 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-      value={val} onChange={e => setVal(e.target.value)}
-      onBlur={() => { onSave(val); setEditing(false); }}
-      onKeyDown={e => { if (e.key === 'Enter') { onSave(val); setEditing(false); } if (e.key === 'Escape') setEditing(false); }} />
-  ) : (
-    <span className="cursor-pointer hover:text-indigo-600 transition-colors flex-1" onDoubleClick={() => { setVal(value || ''); setEditing(true); }}>
-      {value || <span className="text-slate-300 italic">{placeholder}</span>}
-    </span>
-  );
-}
 
 function NominalCell({ value, onSave }: { value: number; onSave: (v: string) => void }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(String(Math.abs(value)));
   return editing ? (
     <input aria-label="Edit nominal" title="Edit nominal" autoFocus type="number"
-      className="w-full border border-indigo-400 rounded px-1.5 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+      className="w-full border border-indigo-400 rounded px-1.5 py-0.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
       value={val} onChange={e => setVal(e.target.value)}
       onBlur={() => { onSave(val); setEditing(false); }}
       onKeyDown={e => { if (e.key === 'Enter') { onSave(val); setEditing(false); } if (e.key === 'Escape') setEditing(false); }} />
@@ -59,13 +29,13 @@ function KategoriCell({ value, onSave }: { value: string; onSave: (v: string) =>
   const [editing, setEditing] = useState(false);
   return editing ? (
     <select title="Pilih kategori" aria-label="Pilih kategori" autoFocus
-      className="text-xs border border-indigo-400 rounded px-1 py-0.5 focus:outline-none bg-white"
+      className="text-xs border border-indigo-400 rounded px-1 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 bg-white"
       value={value} onChange={e => { onSave(e.target.value); setEditing(false); }} onBlur={() => setEditing(false)}>
       <option value="Pemasukan">Pemasukan</option>
       <option value="Pengeluaran">Pengeluaran</option>
     </select>
   ) : (
-    <span onDoubleClick={() => setEditing(true)} className={`cursor-pointer inline-block px-2.5 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-bold ${value === 'Pemasukan' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+    <span onDoubleClick={() => setEditing(true)} className={`cursor-pointer inline-block px-2.5 py-0.5 rounded-full text-2xs uppercase tracking-wider font-bold ${value === 'Pemasukan' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
       {value}
     </span>
   );
@@ -80,7 +50,7 @@ function SubKategoriCell({ value, onSave, kategori }: { value: string; onSave: (
 
   return editing ? (
     <select title="Pilih Sub-Kategori" aria-label="Pilih Sub-Kategori" autoFocus
-      className="w-full text-xs border border-indigo-400 rounded px-1 py-0.5 focus:outline-none bg-white"
+      className="w-full text-xs border border-indigo-400 rounded px-1 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 bg-white"
       value={value || ''} onChange={e => { onSave(e.target.value); setEditing(false); }} onBlur={() => setEditing(false)}>
       <option value="" disabled>Pilih...</option>
       {options.map(o => <option key={o} value={o}>{o}</option>)}
@@ -139,7 +109,7 @@ function DeskripsiCell({ value, onSave, onFill, kategori }: {
   if (editing) {
     return (
       <input aria-label="Edit deskripsi" title="Edit deskripsi" autoFocus
-        className="w-full border border-indigo-400 rounded px-1.5 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+        className="w-full border border-indigo-400 rounded px-1.5 py-0.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
         value={val} onChange={e => setVal(e.target.value)}
         onBlur={() => { onSave(val); setEditing(false); }}
         onKeyDown={e => { if (e.key === 'Enter') { onSave(val); setEditing(false); } if (e.key === 'Escape') setEditing(false); }} />
@@ -162,7 +132,7 @@ function DeskripsiCell({ value, onSave, onFill, kategori }: {
         </button>
         {showDropdown && (
           <div className="absolute left-0 top-6 z-30 bg-white border border-slate-200 rounded-lg shadow-xl w-80 max-h-64 overflow-y-auto">
-            <p className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+            <p className="px-3 py-1.5 text-2xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
               {kategori === 'Pemasukan' ? 'Pilih dari Work Order' : 'Pilih dari Inventory'}
             </p>
             
@@ -184,7 +154,7 @@ function DeskripsiCell({ value, onSave, onFill, kategori }: {
                   </span>
                 </div>
                 {s.type === 'lunas' && s.nominal === 0 && (
-                  <span className="text-[10px] text-slate-400 italic">Sudah lunas / tidak ada DP tercatat</span>
+                  <span className="text-2xs text-slate-400 italic">Sudah lunas / tidak ada DP tercatat</span>
                 )}
               </button>
             ))}
@@ -428,7 +398,7 @@ export default function Finance() {
             <button onClick={() => setActiveTab('piutang')} className={`px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 whitespace-nowrap transition-all ${activeTab === 'piutang' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
               <Wallet className="w-4 h-4" /> Piutang
               {piutangList.length > 0 && (
-                <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold">{piutangList.length}</span>
+                <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-2xs font-bold">{piutangList.length}</span>
               )}
             </button>
           </div>
@@ -436,45 +406,33 @@ export default function Finance() {
         <div className="flex items-center gap-2 shrink-0">
           {/* Export Excel — kontekstual per tab */}
           {activeTab === 'table' && (
-            <button
-              onClick={() => { exportBukuKas(finance); toast.success('Buku Kas berhasil di-export!'); }}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-700 px-3 py-1.5 rounded-lg font-medium text-sm shadow-sm flex items-center gap-2 whitespace-nowrap transition-colors"
-              title="Export Buku Kas ke Excel"
-            >
+            <Button variant="success" title="Export Buku Kas ke Excel"
+              onClick={() => { exportBukuKas(finance); toast.success('Buku Kas berhasil di-export!'); }}>
               <FileSpreadsheet className="w-4 h-4" /> Export Excel
-            </button>
+            </Button>
           )}
           {activeTab === 'report' && (
-            <button
+            <Button variant="success" title="Export laporan lengkap ke Excel"
               onClick={() => {
                 exportLaporanLengkap(finance, workOrders, inventory, [], reportPeriod);
                 toast.success(`Laporan ${reportLabel} berhasil di-export!`);
-              }}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-700 px-3 py-1.5 rounded-lg font-medium text-sm shadow-sm flex items-center gap-2 whitespace-nowrap transition-colors"
-              title="Export laporan lengkap ke Excel"
-            >
+              }}>
               <FileSpreadsheet className="w-4 h-4" /> Export Excel
-            </button>
+            </Button>
           )}
           {activeTab === 'piutang' && (
-            <button
-              onClick={() => { exportPiutang(workOrders, finance); toast.success('Data piutang berhasil di-export!'); }}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-700 px-3 py-1.5 rounded-lg font-medium text-sm shadow-sm flex items-center gap-2 whitespace-nowrap transition-colors"
-              title="Export piutang ke Excel"
-            >
+            <Button variant="success" title="Export piutang ke Excel"
+              onClick={() => { exportPiutang(workOrders, finance); toast.success('Data piutang berhasil di-export!'); }}>
               <FileSpreadsheet className="w-4 h-4" /> Export Excel
-            </button>
+            </Button>
           )}
-          <button
-            onClick={() => window.open(`/erp/print/laporan-keuangan?period=${reportPeriod}`, '_blank')}
-            className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-lg font-medium text-sm shadow-sm flex items-center gap-2 whitespace-nowrap transition-colors"
-          >
+          <Button variant="secondary" onClick={() => window.open(`/erp/print/laporan-keuangan?period=${reportPeriod}`, '_blank')}>
             <Printer className="w-4 h-4" /> Cetak PDF
-          </button>
+          </Button>
           {activeTab === 'table' && (
-            <button onClick={handleAdd} className="bg-indigo-600 hover:bg-indigo-700 text-white border border-indigo-600 px-3 py-1.5 rounded-lg font-medium text-sm shadow-sm flex items-center gap-2 whitespace-nowrap transition-colors">
+            <Button variant="primary" onClick={handleAdd}>
               <Plus className="w-4 h-4" /> Catat Transaksi
-            </button>
+            </Button>
           )}
         </div>
       </header>
@@ -515,7 +473,7 @@ export default function Finance() {
                 className={`text-left bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between hover:bg-amber-50 transition-colors ${piutangList.length > 0 ? 'border-l-4 border-l-amber-500' : ''}`}>
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1">
                   Piutang Belum Lunas
-                  {piutangList.length > 0 && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">{piutangList.length} WO</span>}
+                  {piutangList.length > 0 && <span className="text-3xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">{piutangList.length} WO</span>}
                 </p>
                 <h3 className={`text-base font-bold ${piutangList.length > 0 ? 'text-amber-700' : 'text-slate-400'}`}>
                   Rp {fmt(totalPiutang)}
@@ -535,20 +493,21 @@ export default function Finance() {
                 <div className="relative flex-1 max-w-xs">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input type="text" placeholder="Cari transaksi..." aria-label="Cari transaksi" value={search} onChange={e => setSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 placeholder:text-slate-400" />
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 bg-slate-50 placeholder:text-slate-400" />
                 </div>
                 <div className="flex gap-2 shrink-0">
-                  <button
+                  <Button
+                    variant={showFilter ? 'primary' : 'secondary'}
                     onClick={() => setShowFilter(v => !v)}
-                    className={`relative flex items-center gap-1.5 px-3 py-2 text-sm border rounded-lg transition-colors ${showFilter ? 'bg-indigo-600 text-white border-indigo-600' : 'text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" /></svg>
+                    className="relative">
+                    <FilterIcon className="w-4 h-4" />
                     Filter
-                    {activeFilterCount > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">{activeFilterCount}</span>}
+                    {activeFilterCount > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-2xs rounded-full flex items-center justify-center font-bold">{activeFilterCount}</span>}
                     <ChevronDown className={`w-3 h-3 transition-transform ${showFilter ? 'rotate-180' : ''}`} />
-                  </button>
-                  <button onClick={handleExportCSV} className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+                  </Button>
+                  <Button variant="secondary" onClick={handleExportCSV}>
                     <Download className="w-4 h-4" /> Export CSV
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -558,7 +517,7 @@ export default function Finance() {
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 mb-1">Kategori Utama</label>
                     <select title="Filter kategori" aria-label="Filter kategori" value={filterKategori} onChange={e => setFilterKategori(e.target.value)}
-                      className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300">
+                      className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300">
                       <option value="">Semua</option>
                       <option value="Pemasukan">Pemasukan</option>
                       <option value="Pengeluaran">Pengeluaran</option>
@@ -567,17 +526,17 @@ export default function Finance() {
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 mb-1">Dari Tanggal</label>
                     <input type="date" title="Dari tanggal" aria-label="Dari tanggal" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)}
-                      className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                      className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300" />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 mb-1">Sampai Tanggal</label>
                     <input type="date" title="Sampai tanggal" aria-label="Sampai tanggal" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
-                      className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                      className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300" />
                   </div>
                   {activeFilterCount > 0 && (
-                    <button onClick={clearFilters} className="flex items-center gap-1.5 text-sm text-red-600 hover:text-red-700 px-3 py-1.5 border border-red-200 rounded-lg hover:bg-red-50 transition-colors">
+                    <Button variant="soft-danger" onClick={clearFilters}>
                       <X className="w-3 h-3" /> Reset Filter
-                    </button>
+                    </Button>
                   )}
                 </div>
               )}
@@ -587,24 +546,24 @@ export default function Finance() {
                 <table className="w-full text-sm border-collapse min-w-[1100px]">
                   <thead className="bg-slate-50 sticky top-0 z-10">
                     <tr className="border-b border-slate-200">
-                      <ThCell label="Tanggal" field="tanggal" w="w-32" {...thProps} />
-                      <ThCell label="Kategori" field="kategori" w="w-24" {...thProps} />
-                      <ThCell label="Sub-Kategori" field="subKategori" w="w-40" {...thProps} />
-                      <ThCell label="Deskripsi Transaksi" field="deskripsi" {...thProps} />
-                      <ThCell label="Catatan" field="catatan" w="w-48" {...thProps} />
-                      <ThCell label="Nominal (Rp)" field="nominal" w="w-36" {...thProps} />
-                      <ThCell label="Saldo Berjalan" w="w-36" {...thProps} />
+                      <DataHeader label="Tanggal" field="tanggal" w="w-32" {...thProps} />
+                      <DataHeader label="Kategori" field="kategori" w="w-24" {...thProps} />
+                      <DataHeader label="Sub-Kategori" field="subKategori" w="w-40" {...thProps} />
+                      <DataHeader label="Deskripsi Transaksi" field="deskripsi" {...thProps} />
+                      <DataHeader label="Catatan" field="catatan" w="w-48" {...thProps} />
+                      <DataHeader label="Nominal (Rp)" field="nominal" w="w-36" {...thProps} />
+                      <DataHeader label="Saldo Berjalan" w="w-36" {...thProps} />
                       <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-16">Aksi</th>
                     </tr>
                   </thead>
                   <tbody ref={tableBodyRef}>
-                    {filtered.length === 0 && <tr><td colSpan={8} className="text-center py-12 text-slate-400">Tidak ada data ditemukan.</td></tr>}
+                    {filtered.length === 0 && <EmptyRow colSpan={8} message="Tidak ada data ditemukan." />}
                     {filtered.map((trx, i) => {
                       const runBal = runningBalanceMap[trx.id] ?? 0;
                       return (
                         <tr key={trx.id} data-id={trx.id} className={`border-b border-slate-100 hover:bg-indigo-50/40 transition-colors ${i % 2 === 1 ? 'bg-slate-50/50' : ''}`}>
                           <td className="px-4 py-3 text-slate-600 text-xs whitespace-nowrap">
-                            <EditableCell value={trx.tanggal} onSave={v => update(trx, 'tanggal', v)} type="date" />
+                            <DataCell value={trx.tanggal} onSave={v => update(trx, 'tanggal', v)} type="date" ariaLabel="Edit tanggal" />
                           </td>
                           <td className="px-4 py-3"><KategoriCell value={trx.kategori} onSave={v => update(trx, 'kategori', v)} /></td>
                           <td className="px-4 py-3"><SubKategoriCell value={trx.subKategori || ''} onSave={v => update(trx, 'subKategori', v)} kategori={trx.kategori} /></td>
@@ -616,7 +575,7 @@ export default function Finance() {
                               kategori={trx.kategori}
                             />
                           </td>
-                          <td className="px-4 py-3 text-slate-600 text-xs"><EditableCell value={trx.catatan || ''} onSave={v => update(trx, 'catatan', v)} placeholder="Catatan opsional..." /></td>
+                          <td className="px-4 py-3 text-slate-600 text-xs"><DataCell value={trx.catatan || ''} onSave={v => update(trx, 'catatan', v)} placeholder="Catatan opsional..." ariaLabel="Edit catatan" /></td>
                           <td className="px-4 py-3 whitespace-nowrap">
                             <NominalCell value={trx.nominal} onSave={v => update(trx, 'nominal', v)} />
                           </td>
@@ -624,8 +583,8 @@ export default function Finance() {
                             {runBal >= 0 ? '' : '− '}Rp {fmt(runBal)}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <button title="Hapus transaksi" onClick={() => { if (window.confirm(`Hapus transaksi "${trx.deskripsi}"?`)) deleteFinance(trx.id); }}
-                              className="inline-flex items-center justify-center w-7 h-7 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors">
+                            <button title="Hapus transaksi" aria-label="Hapus transaksi" onClick={() => { if (window.confirm(`Hapus transaksi "${trx.deskripsi}"?`)) deleteFinance(trx.id); }}
+                              className="inline-flex items-center justify-center w-7 h-7 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </td>
@@ -653,7 +612,7 @@ export default function Finance() {
                 <select
                   value={reportPeriod}
                   onChange={e => setReportPeriod(e.target.value)}
-                  className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 font-medium text-slate-700"
+                  className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 font-medium text-slate-700"
                   aria-label="Pilih periode laporan"
                 >
                   {availableMonths.map(m => {
@@ -769,7 +728,7 @@ export default function Finance() {
                   const net = m.pem - m.peng;
                   return (
                     <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end group relative">
-                      <div className="absolute -top-14 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white text-[10px] py-1.5 px-2.5 rounded whitespace-nowrap pointer-events-none z-10 shadow-lg">
+                      <div className="absolute -top-14 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white text-2xs py-1.5 px-2.5 rounded whitespace-nowrap pointer-events-none z-10 shadow-lg">
                         <p className="text-green-300 font-bold">+Rp {fmt(m.pem)}</p>
                         <p className="text-red-300 font-bold">-Rp {fmt(m.peng)}</p>
                         <p className={`font-bold border-t border-slate-600 mt-1 pt-1 ${net >= 0 ? 'text-indigo-300' : 'text-orange-300'}`}>Laba: Rp {fmt(net)}</p>
@@ -778,8 +737,8 @@ export default function Finance() {
                         <div className="flex-1 bg-green-500 rounded-t hover:bg-green-400 transition-colors" style={{ height: `${pemH}%`, minHeight: m.pem > 0 ? '3px' : '0' }} />
                         <div className="flex-1 bg-red-500 rounded-t hover:bg-red-400 transition-colors" style={{ height: `${pengH}%`, minHeight: m.peng > 0 ? '3px' : '0' }} />
                       </div>
-                      <span className="text-[10px] font-medium text-slate-400">{m.label}</span>
-                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${net >= 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                      <span className="text-2xs font-medium text-slate-400">{m.label}</span>
+                      <span className={`text-3xs font-bold px-1.5 py-0.5 rounded-full ${net >= 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
                         {net >= 0 ? '+' : ''}Rp {fmt(net)}
                       </span>
                     </div>
@@ -813,7 +772,7 @@ export default function Finance() {
                         <tr key={t.id} className={`border-b border-slate-100 ${i % 2 === 1 ? 'bg-slate-50/50' : ''}`}>
                           <td className="px-4 py-2 text-slate-500 text-xs">{t.tanggal}</td>
                           <td className="px-4 py-2">
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${t.nominal > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            <span className={`text-2xs font-bold px-2 py-0.5 rounded-full ${t.nominal > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                               {t.kategori}
                             </span>
                           </td>
@@ -847,17 +806,17 @@ export default function Finance() {
               <div className="bg-white px-4 py-3 rounded-lg border border-slate-200 shadow-sm border-l-4 border-l-amber-500">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Total Piutang</p>
                 <h3 className="text-lg font-bold text-amber-700">Rp {fmt(totalPiutang)}</h3>
-                <p className="text-[10px] text-slate-500 mt-0.5">{piutangList.length} WO belum lunas</p>
+                <p className="text-2xs text-slate-500 mt-0.5">{piutangList.length} WO belum lunas</p>
               </div>
               <div className="bg-white px-4 py-3 rounded-lg border border-slate-200 shadow-sm border-l-4 border-l-emerald-500">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">WO Sudah Lunas</p>
                 <h3 className="text-lg font-bold text-emerald-700">{totalLunas} WO</h3>
-                <p className="text-[10px] text-slate-500 mt-0.5">Pembayaran lengkap</p>
+                <p className="text-2xs text-slate-500 mt-0.5">Pembayaran lengkap</p>
               </div>
               <div className="bg-white px-4 py-3 rounded-lg border border-slate-200 shadow-sm border-l-4 border-l-red-500">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Belum Bayar Sama Sekali</p>
                 <h3 className="text-lg font-bold text-red-700">{piutangList.filter(p => p.info.status === 'Belum Bayar').length} WO</h3>
-                <p className="text-[10px] text-slate-500 mt-0.5">Belum ada pembayaran tercatat</p>
+                <p className="text-2xs text-slate-500 mt-0.5">Belum ada pembayaran tercatat</p>
               </div>
             </div>
 
@@ -895,13 +854,13 @@ export default function Finance() {
                           <td className="px-4 py-3 text-right font-semibold text-slate-700">
                             Rp {fmt(Math.max((wo.estimatedCost || 0) - (wo.diskon || 0), 0))}
                             {(wo.diskon || 0) > 0 && (
-                              <span className="block text-[10px] text-amber-500 font-normal">diskon Rp {fmt(wo.diskon!)}</span>
+                              <span className="block text-2xs text-amber-500 font-normal">diskon Rp {fmt(wo.diskon!)}</span>
                             )}
                           </td>
                           <td className="px-4 py-3 text-right font-medium text-green-600">Rp {fmt(info.totalBayar)}</td>
                           <td className="px-4 py-3 text-right font-bold text-amber-700">Rp {fmt(info.sisaTagihan)}</td>
                           <td className="px-4 py-3 text-center">
-                            <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-bold border ${
+                            <span className={`inline-block px-2 py-0.5 rounded-full text-2xs uppercase tracking-wider font-bold border ${
                               info.status === 'Belum Bayar' ? 'bg-red-50 text-red-700 border-red-200' :
                               info.status === 'DP' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                               'bg-emerald-50 text-emerald-700 border-emerald-200'

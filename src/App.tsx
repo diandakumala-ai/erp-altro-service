@@ -90,7 +90,7 @@ const Sidebar = ({
           <>
             <div className="flex-1 min-w-0">
               <p className="text-xs text-white font-medium truncate">{emailDisplay}</p>
-              <p className="text-[10px] text-slate-400 truncate">Administrator</p>
+              <p className="text-2xs text-slate-400 truncate">Administrator</p>
             </div>
             <NotificationBell />
             <button

@@ -1,45 +1,25 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { AgGridReact } from 'ag-grid-react';
-import { Plus, X, Trash2, Search, Download, Filter, FileSpreadsheet, Clock, Eye, Wrench as WrenchIcon, FlaskConical, CheckCircle, PackageCheck } from 'lucide-react';
+import { Plus, X, Trash2, Search, Download, Filter, FileSpreadsheet } from 'lucide-react';
 import { useStore, computeStatusBayar, type WorkOrder, type BomItem, type ServiceItem, type StatusBayar } from '../store/useStore';
 import type { ColDef, CellValueChangedEvent, ValueFormatterParams, ICellRendererParams } from 'ag-grid-community';
 import { exportWorkOrders } from '../lib/exportExcel';
 import { toast } from '../lib/toast';
 import { StatusPill } from './Dashboard';
+import { Button, Badge, DataHeader, DataCell, EmptyRow, type SortDir } from '../components/ui';
 
 const STATUS_OPTIONS = ['Queue', 'Inspecting', 'Repairing', 'Testing', 'Finished', 'Picked Up'];
 const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(n);
 
 function StatusBayarBadge({ status, sisa }: { status: StatusBayar; sisa: number }) {
-  const map: Record<StatusBayar, string> = {
-    'Belum Bayar': 'bg-red-50 text-red-700 border-red-200',
-    'DP': 'bg-amber-50 text-amber-700 border-amber-200',
-    'Lunas': 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  };
+  const tone = status === 'Belum Bayar' ? 'red' : status === 'DP' ? 'amber' : 'emerald';
   const label = status === 'DP' && sisa > 0
     ? `DP · sisa ${new Intl.NumberFormat('id-ID').format(sisa)}`
     : status;
   return (
-    <span title={status === 'DP' ? `Sisa tagihan Rp ${new Intl.NumberFormat('id-ID').format(sisa)}` : status}
-      className={`inline-block px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-bold border ${map[status]}`}>
+    <Badge tone={tone} bordered title={status === 'DP' ? `Sisa tagihan Rp ${new Intl.NumberFormat('id-ID').format(sisa)}` : status}>
       {label}
-    </span>
-  );
-}
-
-function EditableCell({ value, onSave, type = 'text' }: { value: string; onSave: (v: string) => void; type?: string }) {
-  const [editing, setEditing] = useState(false);
-  const [val, setVal] = useState(value);
-  return editing ? (
-    <input aria-label="Edit nilai" title="Edit nilai" type={type}
-      autoFocus className="w-full border border-indigo-400 rounded px-1.5 py-0.5 text-sm focus:outline-none"
-      value={val} onChange={e => setVal(e.target.value)}
-      onBlur={() => { onSave(val); setEditing(false); }}
-      onKeyDown={e => { if (e.key === 'Enter') { onSave(val); setEditing(false); } if (e.key === 'Escape') setEditing(false); }} />
-  ) : (
-    <span className="cursor-pointer hover:text-indigo-600" onDoubleClick={() => { setVal(value); setEditing(true); }}>
-      {value || <span className="text-slate-300">—</span>}
-    </span>
+    </Badge>
   );
 }
 
@@ -47,26 +27,17 @@ function StatusCell({ value, onSave }: { value: string; onSave: (v: string) => v
   const [editing, setEditing] = useState(false);
   return editing ? (
     <select title="Pilih status" aria-label="Pilih status"
-      autoFocus className="text-xs border border-indigo-400 rounded px-1 py-0.5 focus:outline-none bg-white"
+      autoFocus className="text-xs border border-indigo-400 rounded px-1 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 bg-white"
       value={value} onChange={e => { onSave(e.target.value); setEditing(false); }} onBlur={() => setEditing(false)}>
       {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
     </select>
   ) : (
-    <span className="cursor-pointer" onDoubleClick={() => setEditing(true)}><StatusPill status={value} /></span>
-  );
-}
-
-type SortDir = 'asc' | 'desc';
-function ThCell({ label, field, sortField, sortDir, onSort, w }: {
-  label: string; field?: string; sortField: string | null; sortDir: SortDir; onSort: (f: string) => void; w?: string;
-}) {
-  const active = sortField === field;
-  return (
-    <th onClick={() => field && onSort(field)}
-      className={`px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap select-none ${field ? 'cursor-pointer hover:bg-slate-100' : ''} ${w ?? ''}`}>
-      {label}
-      {field && <span className={`ml-1 ${active ? 'text-indigo-500' : 'text-slate-300'}`}>{active ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>}
-    </th>
+    <span role="button" tabIndex={0} aria-label="Edit status. Tekan Enter untuk mengubah."
+      className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 rounded"
+      onDoubleClick={() => setEditing(true)}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); setEditing(true); } }}>
+      <StatusPill status={value} />
+    </span>
   );
 }
 
@@ -113,7 +84,7 @@ function BomRow({ bom, inventory, onUpdate, onRemove }: {
             const updated = { ...draft, barang: barangInput };
             commit(updated);
           }}
-          className="w-full border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:border-indigo-400 min-w-[180px]"
+          className="w-full border border-slate-200 rounded px-2 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus:border-indigo-400 min-w-[180px]"
           placeholder="Ketik nama barang..."
         />
         {showDrop && filtered.length > 0 && (
@@ -138,27 +109,27 @@ function BomRow({ bom, inventory, onUpdate, onRemove }: {
         <input type="number" min={1} value={draft.jumlah} title="Jumlah" aria-label="Jumlah"
           onChange={e => setDraft(d => ({ ...d, jumlah: Number(e.target.value) }))}
           onBlur={() => commit(draft)}
-          className="w-full border border-slate-200 rounded px-1 py-1 text-sm text-center focus:outline-none focus:border-indigo-400" />
+          className="w-full border border-slate-200 rounded px-1 py-1 text-sm text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus:border-indigo-400" />
       </td>
       {/* Satuan */}
       <td className="px-2 py-1 w-20">
         <input type="text" value={draft.satuan} title="Satuan" aria-label="Satuan"
           onChange={e => setDraft(d => ({ ...d, satuan: e.target.value }))}
           onBlur={() => commit(draft)}
-          className="w-full border border-slate-200 rounded px-1 py-1 text-sm focus:outline-none focus:border-indigo-400" />
+          className="w-full border border-slate-200 rounded px-1 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus:border-indigo-400" />
       </td>
       {/* Harga Satuan */}
       <td className="px-2 py-1 w-32">
         <input type="number" min={0} value={draft.harga} title="Harga Satuan" aria-label="Harga Satuan"
           onChange={e => setDraft(d => ({ ...d, harga: Number(e.target.value) }))}
           onBlur={() => commit(draft)}
-          className="w-full border border-slate-200 rounded px-1 py-1 text-sm text-right focus:outline-none focus:border-indigo-400" />
+          className="w-full border border-slate-200 rounded px-1 py-1 text-sm text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus:border-indigo-400" />
       </td>
       {/* Subtotal */}
       <td className="px-2 py-1 text-right text-sm text-slate-700 w-32 whitespace-nowrap">{fmt(draft.jumlah * draft.harga)}</td>
       {/* Hapus */}
       <td className="px-2 py-1 w-10 text-center">
-        <button title="Hapus" onClick={() => onRemove(bom.id)} className="flex items-center justify-center w-7 h-7 rounded bg-red-50 text-red-500 hover:bg-red-100 mx-auto">
+        <button title="Hapus" aria-label="Hapus material" onClick={() => onRemove(bom.id)} className="flex items-center justify-center w-7 h-7 rounded bg-red-50 text-red-500 hover:bg-red-100 mx-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </td>
@@ -239,7 +210,7 @@ export default function WorkOrders() {
   const [svcColDefs] = useState<ColDef<ServiceItem>[]>([
     { field: 'deskripsi', headerName: 'Deskripsi Jasa', flex: 1, editable: true },
     { field: 'biaya', headerName: 'Biaya', width: 150, editable: true, valueFormatter: (p: ValueFormatterParams<ServiceItem, number>) => fmt(p.value ?? 0) },
-    { headerName: '', width: 50, sortable: false, filter: false, resizable: false, cellRenderer: (p: ICellRendererParams<ServiceItem>) => <button title="Hapus" onClick={() => p.data?.id && useStore.getState().removeService(p.data.id)} className="flex items-center justify-center w-7 h-7 rounded bg-red-50 text-red-500 hover:bg-red-100 mt-1"><Trash2 className="w-3.5 h-3.5" /></button> }
+    { headerName: '', width: 50, sortable: false, filter: false, resizable: false, cellRenderer: (p: ICellRendererParams<ServiceItem>) => <button title="Hapus" aria-label="Hapus jasa" onClick={() => p.data?.id && useStore.getState().removeService(p.data.id)} className="flex items-center justify-center w-7 h-7 rounded bg-red-50 text-red-500 hover:bg-red-100 mt-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300"><Trash2 className="w-3.5 h-3.5" /></button> }
   ]);
 
   const handleBomUpdate = useCallback((updated: BomItem) => { updateBom(updated); }, [updateBom]);
@@ -282,15 +253,12 @@ export default function WorkOrders() {
       <header className="bg-white border-b border-slate-200 h-12 flex items-center px-6 justify-between shrink-0">
         <h2 className="text-base font-semibold text-slate-800">Manajemen Pekerjaan (Work Orders)</h2>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => { exportWorkOrders(workOrders, finance); toast.success('Data Work Orders berhasil di-export!'); }}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg font-medium text-sm transition-colors shadow-sm flex items-center gap-2"
-          >
+          <Button variant="success" onClick={() => { exportWorkOrders(workOrders, finance); toast.success('Data Work Orders berhasil di-export!'); }}>
             <FileSpreadsheet className="w-4 h-4" /> Export Excel
-          </button>
-          <button onClick={handleAddWO} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors shadow-sm flex items-center gap-2">
+          </Button>
+          <Button variant="primary" size="md" onClick={handleAddWO}>
             <Plus className="w-4 h-4" /> SPK Baru
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -316,11 +284,11 @@ export default function WorkOrders() {
             <div className="relative flex-1 max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input type="text" placeholder="Cari work order..." aria-label="Cari work order" value={search} onChange={e => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 placeholder:text-slate-400" />
+                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 bg-slate-50 placeholder:text-slate-400" />
             </div>
             <div className="flex gap-2 shrink-0">
-              <button className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50"><Filter className="w-4 h-4" /> Filter</button>
-              <button onClick={handleExport} className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50"><Download className="w-4 h-4" /> Export CSV</button>
+              <Button variant="secondary"><Filter className="w-4 h-4" /> Filter</Button>
+              <Button variant="secondary" onClick={handleExport}><Download className="w-4 h-4" /> Export CSV</Button>
             </div>
           </div>
 
@@ -328,44 +296,44 @@ export default function WorkOrders() {
             <table className="w-full text-sm border-collapse min-w-[1100px]">
               <thead className="bg-slate-50 sticky top-0 z-10">
                 <tr className="border-b border-slate-200">
-                  <ThCell label="ID" field="id" w="w-32" {...thProps} />
-                  <ThCell label="Pelanggan" field="customer" {...thProps} />
-                  <ThCell label="Item / Merk" field="merk" {...thProps} />
-                  <ThCell label="Kapasitas" field="capacity" w="w-24" {...thProps} />
-                  <ThCell label="Status" field="status" w="w-28" {...thProps} />
-                  <ThCell label="Teknisi" field="technician" w="w-28" {...thProps} />
-                  <ThCell label="Tgl Masuk" field="dateIn" w="w-28" {...thProps} />
-                  <ThCell label="Est. Selesai" field="estimasiSelesai" w="w-28" {...thProps} />
-                  <ThCell label="Total Biaya" field="estimatedCost" w="w-32" {...thProps} />
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">Status Bayar</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-44">Aksi</th>
+                  <DataHeader label="ID" field="id" w="w-32" {...thProps} />
+                  <DataHeader label="Pelanggan" field="customer" {...thProps} />
+                  <DataHeader label="Item / Merk" field="merk" {...thProps} />
+                  <DataHeader label="Kapasitas" field="capacity" w="w-24" {...thProps} />
+                  <DataHeader label="Status" field="status" w="w-28" {...thProps} />
+                  <DataHeader label="Teknisi" field="technician" w="w-28" {...thProps} />
+                  <DataHeader label="Tgl Masuk" field="dateIn" w="w-28" {...thProps} />
+                  <DataHeader label="Est. Selesai" field="estimasiSelesai" w="w-28" {...thProps} />
+                  <DataHeader label="Total Biaya" field="estimatedCost" w="w-32" {...thProps} />
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">Status Bayar</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-44">Aksi</th>
                 </tr>
               </thead>
               <tbody ref={tableBodyRef}>
                 {filtered.length === 0 && (
-                  <tr><td colSpan={11} className="text-center py-12 text-slate-400">
-                    {search ? 'Tidak ada data yang cocok dengan pencarian.' : (
+                  <EmptyRow colSpan={11} message={
+                    search ? 'Tidak ada data yang cocok dengan pencarian.' : (
                       <div className="flex flex-col items-center gap-3">
                         <p className="text-sm">Belum ada Work Order.</p>
-                        <button onClick={handleAddWO} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
+                        <Button variant="primary" size="md" onClick={handleAddWO}>
                           <Plus className="w-4 h-4" /> Buat SPK Pertama
-                        </button>
+                        </Button>
                       </div>
-                    )}
-                  </td></tr>
+                    )
+                  } />
                 )}
                 {filtered.map((wo, i) => {
                   const piutang = computeStatusBayar(wo, finance);
                   return (
                   <tr key={wo.id} data-id={wo.id} className={`border-b border-slate-100 hover:bg-indigo-50/40 transition-colors ${i % 2 === 1 ? 'bg-slate-50/50' : ''}`}>
                     <td className="px-4 py-3 font-mono text-xs font-medium text-slate-700 whitespace-nowrap">{wo.id}</td>
-                    <td className="px-4 py-3 text-slate-800 min-w-[140px]"><EditableCell value={wo.customer} onSave={v => update(wo, 'customer', v)} /></td>
-                    <td className="px-4 py-3 text-slate-700 min-w-[120px]"><EditableCell value={wo.merk} onSave={v => update(wo, 'merk', v)} /></td>
-                    <td className="px-4 py-3 text-slate-600"><EditableCell value={wo.capacity} onSave={v => update(wo, 'capacity', v)} /></td>
+                    <td className="px-4 py-3 text-slate-800 min-w-[140px]"><DataCell value={wo.customer} onSave={v => update(wo, 'customer', v)} ariaLabel="Edit pelanggan" /></td>
+                    <td className="px-4 py-3 text-slate-700 min-w-[120px]"><DataCell value={wo.merk} onSave={v => update(wo, 'merk', v)} ariaLabel="Edit merk" /></td>
+                    <td className="px-4 py-3 text-slate-600"><DataCell value={wo.capacity} onSave={v => update(wo, 'capacity', v)} ariaLabel="Edit kapasitas" /></td>
                     <td className="px-4 py-3"><StatusCell value={wo.status} onSave={v => update(wo, 'status', v)} /></td>
-                    <td className="px-4 py-3 text-slate-700"><EditableCell value={wo.technician} onSave={v => update(wo, 'technician', v)} /></td>
-                    <td className="px-4 py-3 text-slate-600 text-xs whitespace-nowrap"><EditableCell value={wo.dateIn} onSave={v => update(wo, 'dateIn', v)} type="date" /></td>
-                    <td className="px-4 py-3 text-slate-600 text-xs"><EditableCell value={wo.estimasiSelesai} onSave={v => update(wo, 'estimasiSelesai', v)} type="date" /></td>
+                    <td className="px-4 py-3 text-slate-700"><DataCell value={wo.technician} onSave={v => update(wo, 'technician', v)} ariaLabel="Edit teknisi" /></td>
+                    <td className="px-4 py-3 text-slate-600 text-xs whitespace-nowrap"><DataCell value={wo.dateIn} onSave={v => update(wo, 'dateIn', v)} type="date" ariaLabel="Edit tanggal masuk" /></td>
+                    <td className="px-4 py-3 text-slate-600 text-xs"><DataCell value={wo.estimasiSelesai} onSave={v => update(wo, 'estimasiSelesai', v)} type="date" ariaLabel="Edit estimasi selesai" /></td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <button
                         title="Klik untuk edit Jasa & Material"
@@ -383,12 +351,12 @@ export default function WorkOrders() {
                     <td className="px-4 py-3">
                       {wo.estimatedCost > 0
                         ? <StatusBayarBadge status={piutang.status} sisa={piutang.sisaTagihan} />
-                        : <span className="text-[10px] italic text-slate-300">— belum ada biaya —</span>}
+                        : <span className="text-2xs italic text-slate-300">— belum ada biaya —</span>}
                     </td>
                     <td className="px-4 py-3">
                       <select
                         title="Pilih Aksi" aria-label="Pilih Aksi"
-                        className="text-xs font-medium bg-white border border-slate-200 text-slate-700 rounded-md px-2 py-1.5 w-36 cursor-pointer hover:bg-slate-50 focus:outline-none focus:ring-1 focus:ring-indigo-400 shadow-sm"
+                        className="text-xs font-medium bg-white border border-slate-200 text-slate-700 rounded-md px-2 py-1.5 w-36 cursor-pointer hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 shadow-sm"
                         value=""
                         onChange={e => {
                           const val = e.target.value;
@@ -426,7 +394,7 @@ export default function WorkOrders() {
                 <h3 className="text-lg font-bold text-slate-800">Detail Pekerjaan & Material</h3>
                 <p className="text-sm text-slate-500">WO: {selectedWO.id} — {selectedWO.merk}</p>
               </div>
-              <button title="Tutup" onClick={() => setSelectedWO(null)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400"><X className="w-5 h-5" /></button>
+              <button title="Tutup" aria-label="Tutup detail pekerjaan" onClick={() => setSelectedWO(null)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-6 flex-1 flex flex-col overflow-y-auto bg-slate-50 gap-5">
               <div className="bg-blue-50 border border-blue-200 px-4 py-3 rounded-lg text-sm text-blue-800">
@@ -435,14 +403,14 @@ export default function WorkOrders() {
               <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 flex flex-col gap-3">
                 <div className="flex justify-between items-center">
                   <h4 className="font-semibold text-slate-700">Tindakan Jasa</h4>
-                  <button onClick={handleAddService} className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded-md font-medium text-sm flex items-center gap-2 border border-indigo-200"><Plus className="w-4 h-4" /> Tambah Jasa</button>
+                  <Button variant="soft-indigo" onClick={handleAddService}><Plus className="w-4 h-4" /> Tambah Jasa</Button>
                 </div>
                 <AgGridReact rowData={services.filter(s => s.woId === selectedWO.id)} columnDefs={svcColDefs} defaultColDef={defaultColDef} getRowId={p => p.data.id} className="ag-theme-alpine w-full" domLayout="autoHeight" rowHeight={40} headerHeight={40} onCellValueChanged={handleSvcChanged} />
               </div>
               <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 flex flex-col gap-3">
                 <div className="flex justify-between items-center">
                   <h4 className="font-semibold text-slate-700">Penggunaan Suku Cadang (Material)</h4>
-                  <button onClick={handleAddBom} className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-3 py-1.5 rounded-md font-medium text-sm flex items-center gap-2 border border-emerald-200"><Plus className="w-4 h-4" /> Tambah Material</button>
+                  <Button variant="soft-emerald" onClick={handleAddBom}><Plus className="w-4 h-4" /> Tambah Material</Button>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
@@ -537,8 +505,8 @@ export default function WorkOrders() {
 
             </div>
             <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-3 shrink-0">
-              <button onClick={() => setSelectedWO(null)} className="px-4 py-2 border border-slate-300 bg-white text-slate-700 rounded-lg font-medium hover:bg-slate-50 text-sm">Batal</button>
-              <button onClick={handleSave} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 text-sm">Simpan & Update Biaya WO</button>
+              <Button variant="secondary" size="md" onClick={() => setSelectedWO(null)}>Batal</Button>
+              <Button variant="primary" size="md" onClick={handleSave}>Simpan & Update Biaya WO</Button>
             </div>
           </div>
         </div>

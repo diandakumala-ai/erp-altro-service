@@ -128,15 +128,15 @@ export default function PrintTemplates() {
 
           <div className="grid grid-cols-3 gap-4 mb-7">
             <div className="border-2 border-green-200 bg-green-50 rounded-lg p-4 text-center">
-              <p className="text-[10px] font-bold text-green-600 uppercase tracking-widest mb-1">Total Pemasukan</p>
+              <p className="text-2xs font-bold text-green-600 uppercase tracking-widest mb-1">Total Pemasukan</p>
               <p className="text-xl font-black text-green-800">Rp {fmt(totalPemasukan)}</p>
             </div>
             <div className="border-2 border-red-200 bg-red-50 rounded-lg p-4 text-center">
-              <p className="text-[10px] font-bold text-red-600 uppercase tracking-widest mb-1">Total Pengeluaran</p>
+              <p className="text-2xs font-bold text-red-600 uppercase tracking-widest mb-1">Total Pengeluaran</p>
               <p className="text-xl font-black text-red-800">Rp {fmt(totalPengeluaran)}</p>
             </div>
             <div className={`border-2 rounded-lg p-4 text-center ${labaBersih >= 0 ? 'border-indigo-200 bg-indigo-50' : 'border-orange-200 bg-orange-50'}`}>
-              <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${labaBersih >= 0 ? 'text-indigo-600' : 'text-orange-600'}`}>{labaBersih >= 0 ? 'Laba Bersih' : 'Rugi Bersih'}</p>
+              <p className={`text-2xs font-bold uppercase tracking-widest mb-1 ${labaBersih >= 0 ? 'text-indigo-600' : 'text-orange-600'}`}>{labaBersih >= 0 ? 'Laba Bersih' : 'Rugi Bersih'}</p>
               <p className={`text-xl font-black ${labaBersih >= 0 ? 'text-indigo-900' : 'text-orange-800'}`}>Rp {fmt(Math.abs(labaBersih))}</p>
             </div>
           </div>
@@ -312,14 +312,14 @@ export default function PrintTemplates() {
               />
               <div>
                 <h1 className="text-base font-bold font-serif text-blue-900 tracking-wide leading-tight">{bs.namaBengkel}</h1>
-                <p className="text-[10px] mt-0.5 font-semibold">{bs.alamat}{bs.kota ? `, ${bs.kota}` : ''}</p>
-                <p className="text-[10px]">
+                <p className="text-2xs mt-0.5 font-semibold">{bs.alamat}{bs.kota ? `, ${bs.kota}` : ''}</p>
+                <p className="text-2xs">
                   {bs.telepon && `Telp: ${bs.telepon}`}
                   {bs.telepon && bs.hp && ' | '}
                   {bs.hp && `HP: ${bs.hp}`}
                 </p>
-                {bs.email && <p className="text-[10px]">Email: {bs.email}</p>}
-                {bs.npwp && <p className="text-[10px]">NPWP: {bs.npwp}</p>}
+                {bs.email && <p className="text-2xs">Email: {bs.email}</p>}
+                {bs.npwp && <p className="text-2xs">NPWP: {bs.npwp}</p>}
               </div>
             </div>
             <div className="text-right text-xs">
@@ -383,7 +383,7 @@ export default function PrintTemplates() {
             <tfoot>
               {/* Pembayaran + Jumlah */}
               <tr className="border-t border-black">
-                <td colSpan={3} className="py-1.5 px-2 border-r border-black align-top text-[10px]" rowSpan={diskon > 0 ? 3 : 2}>
+                <td colSpan={3} className="py-1.5 px-2 border-r border-black align-top text-2xs" rowSpan={diskon > 0 ? 3 : 2}>
                   <p className="font-semibold mb-0.5">Pembayaran dapat ditransfer ke:</p>
                   <p>BANK MANDIRI A/N SUWALDI</p>
                   <p>No.Rek 108-00-1007188-5</p>
@@ -420,17 +420,17 @@ export default function PrintTemplates() {
               <div className="h-14 mt-1"></div>
               <div className="pt-1.5">
                 <p className="text-xs">(................................)</p>
-                <p className="text-[10px] text-gray-500 mt-0.5">{wo.customer}</p>
+                <p className="text-2xs text-gray-500 mt-0.5">{wo.customer}</p>
               </div>
             </div>
             {/* Direktur */}
             <div className="text-center">
-              <p className="text-[10px] text-gray-500">{bs.kota || 'Pekanbaru'}, {today}</p>
+              <p className="text-2xs text-gray-500">{bs.kota || 'Pekanbaru'}, {today}</p>
               <p className="text-xs font-medium mt-0.5">Hormat Kami,</p>
               <div className="h-14 mt-1"></div>
               <div className="pt-1.5">
                 <p className="font-bold text-xs">{bs.namaPemilik || bs.namaBengkel}</p>
-                <p className="text-[10px] text-gray-500">{bs.jabatanPemilik || 'Direktur'}</p>
+                <p className="text-2xs text-gray-500">{bs.jabatanPemilik || 'Direktur'}</p>
               </div>
             </div>
           </div>
@@ -610,13 +610,13 @@ export default function PrintTemplates() {
               />
               <div>
                 <h1 className="text-base font-bold font-serif tracking-wide leading-tight">{bs.namaBengkel}</h1>
-                <p className="text-[10px] mt-0.5 font-semibold">{bs.alamat}{bs.kota ? `, ${bs.kota}` : ''}</p>
-                <p className="text-[10px]">
+                <p className="text-2xs mt-0.5 font-semibold">{bs.alamat}{bs.kota ? `, ${bs.kota}` : ''}</p>
+                <p className="text-2xs">
                   {bs.telepon && `Telp: ${bs.telepon}`}
                   {bs.telepon && bs.hp && ' | '}
                   {bs.hp && `HP: ${bs.hp}`}
                 </p>
-                {bs.email && <p className="text-[10px]">Email: {bs.email}</p>}
+                {bs.email && <p className="text-2xs">Email: {bs.email}</p>}
               </div>
             </div>
             <div className="text-right">
@@ -671,7 +671,7 @@ export default function PrintTemplates() {
               <div className="h-14 mt-1"></div>
               <div className="pt-1.5">
                 <p className="text-xs">(................................)</p>
-                <p className="text-[10px] text-gray-500 mt-0.5">{wo.customer}</p>
+                <p className="text-2xs text-gray-500 mt-0.5">{wo.customer}</p>
               </div>
             </div>
 
@@ -681,18 +681,18 @@ export default function PrintTemplates() {
               <div className="h-14 mt-1"></div>
               <div className="pt-1.5">
                 <p className="text-xs">(................................)</p>
-                <p className="text-[10px] text-gray-500 mt-0.5">&nbsp;</p>
+                <p className="text-2xs text-gray-500 mt-0.5">&nbsp;</p>
               </div>
             </div>
 
             {/* Direktur */}
             <div className="text-center">
-              <p className="text-[10px] text-gray-500">{bs.kota || 'Pekanbaru'}, {today}</p>
+              <p className="text-2xs text-gray-500">{bs.kota || 'Pekanbaru'}, {today}</p>
               <p className="text-xs font-medium mt-0.5">Hormat Kami,</p>
               <div className="h-14 mt-1"></div>
               <div className="pt-1.5">
                 <p className="font-bold text-xs">{bs.namaPemilik || bs.namaBengkel}</p>
-                <p className="text-[10px] text-gray-500">{bs.jabatanPemilik || 'Direktur'}</p>
+                <p className="text-2xs text-gray-500">{bs.jabatanPemilik || 'Direktur'}</p>
               </div>
             </div>
 
