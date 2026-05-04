@@ -4,6 +4,7 @@ import { useStore, type InventoryItem } from '../store/useStore';
 import { exportInventory } from '../lib/exportExcel';
 import { toast } from '../lib/toast';
 import { Button, DataHeader, DataCell, EmptyRow, type SortDir } from '../components/ui';
+import { confirm } from '../lib/confirm';
 
 export default function Inventory() {
   const inventory     = useStore(s => s.inventory);
@@ -169,7 +170,15 @@ export default function Inventory() {
                       </td>
                       <td className="px-4 py-3">
                         <Button variant="soft-danger" size="sm" title="Hapus barang"
-                          onClick={() => { if (window.confirm(`Hapus "${item.nama}" dari stok?`)) deleteInventory(item.id); }}>
+                          onClick={async () => {
+                            const ok = await confirm({
+                              title: 'Hapus barang?',
+                              message: <>Item <b>{item.nama}</b> ({item.id}) akan dihapus dari stok permanen. {item.stok > 0 && <>Sisa stok <b>{item.stok} {item.satuan}</b> akan hilang dari catatan.</>}</>,
+                              destructive: true,
+                              confirmLabel: 'Hapus barang',
+                            });
+                            if (ok) deleteInventory(item.id);
+                          }}>
                           <Trash2 className="w-3 h-3" /> Hapus
                         </Button>
                       </td>

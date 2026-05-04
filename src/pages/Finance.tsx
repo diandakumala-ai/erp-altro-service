@@ -4,6 +4,7 @@ import { useStore, computeStatusBayar, type FinanceTransaction } from '../store/
 import { exportBukuKas, exportLaporanBulanan, exportPiutang, exportLaporanLengkap } from '../lib/exportExcel';
 import { toast } from '../lib/toast';
 import { Button, DataHeader, DataCell, EmptyRow, type SortDir } from '../components/ui';
+import { confirm } from '../lib/confirm';
 
 const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(Math.abs(n));
 
@@ -583,7 +584,16 @@ export default function Finance() {
                             {runBal >= 0 ? '' : '− '}Rp {fmt(runBal)}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <button title="Hapus transaksi" aria-label="Hapus transaksi" onClick={() => { if (window.confirm(`Hapus transaksi "${trx.deskripsi}"?`)) deleteFinance(trx.id); }}
+                            <button title="Hapus transaksi" aria-label="Hapus transaksi"
+                              onClick={async () => {
+                                const ok = await confirm({
+                                  title: 'Hapus transaksi?',
+                                  message: <>Transaksi <b>{trx.deskripsi}</b> ({trx.tanggal}, Rp {fmt(trx.nominal)}) akan dihapus permanen dari buku kas. Saldo berjalan akan dihitung ulang otomatis.</>,
+                                  destructive: true,
+                                  confirmLabel: 'Hapus transaksi',
+                                });
+                                if (ok) deleteFinance(trx.id);
+                              }}
                               className="inline-flex items-center justify-center w-7 h-7 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300">
                               <Trash2 className="w-4 h-4" />
                             </button>

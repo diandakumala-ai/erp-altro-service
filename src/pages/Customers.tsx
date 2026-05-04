@@ -2,6 +2,7 @@ import { useState, useMemo, useRef } from 'react';
 import { Plus, Trash2, Search, Download, Filter, FileSpreadsheet } from 'lucide-react';
 import { useStore, type Customer } from '../store/useStore';
 import { Button, DataHeader, DataCell, EmptyRow, type SortDir } from '../components/ui';
+import { confirm } from '../lib/confirm';
 
 export default function Customers() {
   const customers = useStore(s => s.customers);
@@ -141,7 +142,15 @@ export default function Customers() {
                       <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">{c.totalWo}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <Button variant="soft-danger" size="sm" onClick={() => { if (window.confirm(`Hapus pelanggan "${c.nama}"?`)) deleteCustomer(c.id); }}>
+                      <Button variant="soft-danger" size="sm" onClick={async () => {
+                        const ok = await confirm({
+                          title: 'Hapus pelanggan?',
+                          message: <>Pelanggan <b>{c.nama}</b>{c.perusahaan && c.perusahaan !== '-' ? <> ({c.perusahaan})</> : null} akan dihapus permanen. {c.totalWo > 0 && <>Pelanggan ini memiliki <b>{c.totalWo} WO</b> tercatat.</>} Tindakan ini tidak bisa diurungkan.</>,
+                          destructive: true,
+                          confirmLabel: 'Hapus pelanggan',
+                        });
+                        if (ok) deleteCustomer(c.id);
+                      }}>
                         <Trash2 className="w-3 h-3" /> Hapus
                       </Button>
                     </td>

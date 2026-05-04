@@ -1,12 +1,13 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { AgGridReact } from 'ag-grid-react';
-import { Plus, X, Trash2, Search, Download, Filter, FileSpreadsheet } from 'lucide-react';
+import { Plus, Trash2, Search, Download, Filter, FileSpreadsheet } from 'lucide-react';
 import { useStore, computeStatusBayar, type WorkOrder, type BomItem, type ServiceItem, type StatusBayar } from '../store/useStore';
 import type { ColDef, CellValueChangedEvent, ValueFormatterParams, ICellRendererParams } from 'ag-grid-community';
 import { exportWorkOrders } from '../lib/exportExcel';
 import { toast } from '../lib/toast';
+import { confirm } from '../lib/confirm';
 import { StatusPill } from './Dashboard';
-import { Button, Badge, DataHeader, DataCell, EmptyRow, type SortDir } from '../components/ui';
+import { Button, Badge, Dialog, DataHeader, DataCell, EmptyRow, type SortDir } from '../components/ui';
 
 const STATUS_OPTIONS = ['Queue', 'Inspecting', 'Repairing', 'Testing', 'Finished', 'Picked Up'];
 const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(n);
@@ -364,7 +365,14 @@ export default function WorkOrders() {
                           if (val === 'spk') window.open(`/print/spk/${wo.id}`, '_blank');
                           else if (val === 'invoice') window.open(`/print/invoice/${wo.id}`, '_blank');
                           else if (val === 'sj') window.open(`/print/surat-jalan/${wo.id}`, '_blank');
-                          else if (val === 'delete') { if (window.confirm(`Hapus WO "${wo.id}"?`)) deleteWorkOrder(wo.id); }
+                          else if (val === 'delete') {
+                            confirm({
+                              title: 'Hapus Work Order?',
+                              message: <>Pekerjaan <b>{wo.id}</b> ({wo.customer} — {wo.merk}) akan dihapus permanen, beserta semua data BOM, jasa, dan transaksi terkait. Tindakan ini <b>tidak bisa diurungkan</b>.</>,
+                              destructive: true,
+                              confirmLabel: 'Hapus WO',
+                            }).then(ok => { if (ok) deleteWorkOrder(wo.id); });
+                          }
                         }}
                       >
                         <option value="" disabled hidden>Aksi...</option>
@@ -387,16 +395,20 @@ export default function WorkOrders() {
       </main>
 
       {selectedWO && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-6">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl flex flex-col max-h-[85vh]">
-            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0">
-              <div>
-                <h3 className="text-lg font-bold text-slate-800">Detail Pekerjaan & Material</h3>
-                <p className="text-sm text-slate-500">WO: {selectedWO.id} — {selectedWO.merk}</p>
-              </div>
-              <button title="Tutup" aria-label="Tutup detail pekerjaan" onClick={() => setSelectedWO(null)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="p-6 flex-1 flex flex-col overflow-y-auto bg-slate-50 gap-5">
+        <Dialog
+          open
+          onClose={() => setSelectedWO(null)}
+          size="xl"
+          title="Detail Pekerjaan & Material"
+          description={`WO: ${selectedWO.id} — ${selectedWO.merk}`}
+          footer={
+            <>
+              <Button variant="secondary" size="md" onClick={() => setSelectedWO(null)}>Batal</Button>
+              <Button variant="primary" size="md" onClick={handleSave}>Simpan & Update Biaya WO</Button>
+            </>
+          }
+        >
+          <div className="p-6 flex flex-col gap-5">
               <div className="bg-blue-50 border border-blue-200 px-4 py-3 rounded-lg text-sm text-blue-800">
                 Edit nilai di sel secara langsung. Klik <b>Simpan & Update Biaya WO</b> untuk memperbarui total biaya.
               </div>
@@ -503,13 +515,8 @@ export default function WorkOrders() {
                 )}
               </div>
 
-            </div>
-            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-3 shrink-0">
-              <Button variant="secondary" size="md" onClick={() => setSelectedWO(null)}>Batal</Button>
-              <Button variant="primary" size="md" onClick={handleSave}>Simpan & Update Biaya WO</Button>
-            </div>
           </div>
-        </div>
+        </Dialog>
       )}
 
     </div>

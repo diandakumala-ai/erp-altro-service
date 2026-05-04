@@ -16,6 +16,7 @@ import { loadAllData, loadSettings, isDatabaseEmpty, seedDatabase } from './lib/
 import { useStore } from './store/useStore'
 import { supabase } from './lib/supabase'
 import { Toaster } from './components/Toaster'
+import { ConfirmDialogHost } from './components/ConfirmDialogHost'
 import { NotificationBell } from './components/NotificationBell'
 import { toast } from './lib/toast'
 
@@ -268,6 +269,7 @@ function App() {
         )}
       </Router>
       <Toaster />
+      <ConfirmDialogHost />
     </>
   );
 }
