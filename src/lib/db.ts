@@ -27,6 +27,8 @@ const toDbWo = (w: WorkOrder) => ({
   estimasi_selesai: w.estimasiSelesai,
   estimated_cost: w.estimatedCost,
   diskon: w.diskon ?? 0,
+  termin_hari: w.terminHari ?? 0,
+  tanggal_invoice: w.tanggalInvoice || null,
 });
 
 const fromDbWo = (r: Record<string, unknown>): WorkOrder => ({
@@ -41,6 +43,8 @@ const fromDbWo = (r: Record<string, unknown>): WorkOrder => ({
   estimasiSelesai: r.estimasi_selesai as string,
   estimatedCost: r.estimated_cost as number,
   diskon: (r.diskon as number | null) ?? 0,
+  terminHari: (r.termin_hari as number | null) ?? 0,
+  tanggalInvoice: (r.tanggal_invoice as string | null) ?? undefined,
 });
 
 const toDbInv = (i: InventoryItem) => ({
@@ -72,6 +76,7 @@ const toDbFin = (f: FinanceTransaction) => ({
   nominal: f.nominal,
   catatan: f.catatan || null,
   is_rutin: f.isRutin || false,
+  wo_id: f.woId || null,
 });
 
 const fromDbFin = (r: Record<string, unknown>): FinanceTransaction => ({
@@ -83,6 +88,7 @@ const fromDbFin = (r: Record<string, unknown>): FinanceTransaction => ({
   nominal: r.nominal as number,
   catatan: r.catatan as string | undefined,
   isRutin: r.is_rutin as boolean | undefined,
+  woId: (r.wo_id as string | null) ?? undefined,
 });
 
 const toDbBom = (b: BomItem) => ({
@@ -130,6 +136,7 @@ const toDbSettings = (s: BengkelSettings) => ({
   npwp: s.npwp,
   nama_pemilik: s.namaPemilik,
   jabatan_pemilik: s.jabatanPemilik,
+  default_termin_hari: s.defaultTerminHari ?? 0,
 });
 
 const fromDbSettings = (r: Record<string, unknown>): BengkelSettings => ({
@@ -142,6 +149,7 @@ const fromDbSettings = (r: Record<string, unknown>): BengkelSettings => ({
   npwp: (r.npwp as string) ?? '',
   namaPemilik: (r.nama_pemilik as string) ?? '',
   jabatanPemilik: (r.jabatan_pemilik as string) ?? '',
+  defaultTerminHari: (r.default_termin_hari as number | null) ?? 0,
 });
 
 const toDbCus = (c: Customer) => ({

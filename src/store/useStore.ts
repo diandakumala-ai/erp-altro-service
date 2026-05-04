@@ -13,7 +13,15 @@ export interface WorkOrder {
   dateIn: string;
   estimasiSelesai: string;
   estimatedCost: number;
-  diskon?: number;       // Diskon nominal (Rp) — opsional
+  diskon?: number;             // Diskon nominal (Rp) — opsional
+  /** Termin pembayaran dalam hari. 0 = COD/Lunas di Tempat (default). */
+  terminHari?: number;
+  /**
+   * Tanggal terbit invoice (ISO yyyy-mm-dd). Auto-set ke today saat status
+   * pertama kali transit ke 'Finished'. Bisa di-override manual. Tidak berubah
+   * saat re-print. NULL = belum terbit invoice.
+   */
+  tanggalInvoice?: string;
 }
 
 export interface InventoryItem {
@@ -35,33 +43,90 @@ export interface FinanceTransaction {
   nominal: number;
   catatan?: string;
   isRutin?: boolean;
+  /**
+   * Foreign key ke work_orders.id untuk pembayaran servis. NULL untuk transaksi
+   * non-WO (operasional, gaji, listrik, dll). Sebelum migrasi 20260504,
+   * link via substring matching `deskripsi.includes(wo.id)` — sekarang prefer
+   * woId. computeStatusBayar tetap fallback ke substring matching untuk
+   * backward compat selama backfill belum jalan.
+   */
+  woId?: string;
 }
 
 export type StatusBayar = 'Belum Bayar' | 'DP' | 'Lunas';
 
 export interface PiutangInfo {
   status: StatusBayar;
-  totalBayar: number;   // jumlah uang masuk yang merujuk ke WO ini
-  sisaTagihan: number;  // estimatedCost - totalBayar (>= 0)
+  totalBayar: number;          // jumlah uang masuk yang merujuk ke WO ini
+  sisaTagihan: number;         // effectiveTotal - totalBayar (>= 0)
+  /** ISO date jatuh tempo, atau null kalau COD / belum terbit invoice / lunas. */
+  jatuhTempo: string | null;
+  /** Hari sampai jatuh tempo. Negatif = sudah lewat. null bila tidak ada due date. */
+  hariKeJatuhTempo: number | null;
+  /** True bila masih ada sisa & sudah lewat tanggal jatuh tempo. */
+  isOverdue: boolean;
+  /** True bila masih ada sisa & jatuh tempo dalam 3 hari ke depan (bukan overdue). */
+  isDueSoon: boolean;
+}
+
+/** Hitung tanggal jatuh tempo. Returns null bila COD atau belum ada tanggal invoice. */
+export function getJatuhTempo(wo: WorkOrder): string | null {
+  const termin = wo.terminHari ?? 0;
+  if (termin <= 0 || !wo.tanggalInvoice) return null;
+  const d = new Date(wo.tanggalInvoice);
+  if (isNaN(d.getTime())) return null;
+  d.setDate(d.getDate() + termin);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Beda hari (today - target). Negatif = target di masa depan. Positif = sudah lewat. */
+function diffDaysFromToday(isoDate: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(isoDate);
+  target.setHours(0, 0, 0, 0);
+  return Math.round((today.getTime() - target.getTime()) / 86_400_000);
 }
 
 /**
- * Hitung status pembayaran sebuah Work Order berdasarkan transaksi finance
- * yang menyebut ID WO di deskripsinya. Tidak butuh kolom database baru —
- * cukup baca dari transaksi yang sudah ada.
+ * Hitung status pembayaran + info jatuh tempo sebuah Work Order.
+ *
+ * Link finance ↔ WO:
+ *   1. Prefer `f.woId === wo.id` (kolom FK eksplisit, post-migrasi 20260504)
+ *   2. Fallback ke substring matching `f.deskripsi.includes(wo.id)` untuk
+ *      backward compat (data legacy yang belum ter-backfill)
+ *
+ * Jatuh tempo: dihitung dari `tanggalInvoice + terminHari`. Null kalau COD
+ * (terminHari = 0) atau invoice belum terbit.
  */
 export const computeStatusBayar = (wo: WorkOrder, finance: FinanceTransaction[]): PiutangInfo => {
   const totalBayar = finance
-    .filter(f => f.kategori === 'Pemasukan' && f.deskripsi.includes(wo.id) && f.nominal > 0)
+    .filter(f =>
+      f.kategori === 'Pemasukan' &&
+      f.nominal > 0 &&
+      // Prefer FK eksplisit, fallback ke substring match
+      (f.woId === wo.id || (!f.woId && f.deskripsi.includes(wo.id)))
+    )
     .reduce((sum, f) => sum + f.nominal, 0);
+
   // Tagihan efektif sudah dikurangi diskon
   const effectiveTotal = Math.max((wo.estimatedCost || 0) - (wo.diskon || 0), 0);
   const sisaTagihan = Math.max(effectiveTotal - totalBayar, 0);
+
   let status: StatusBayar;
   if (totalBayar <= 0) status = 'Belum Bayar';
   else if (totalBayar >= effectiveTotal) status = 'Lunas';
   else status = 'DP';
-  return { status, totalBayar, sisaTagihan };
+
+  // Hitung jatuh tempo & flag derived
+  const jatuhTempo = getJatuhTempo(wo);
+  const hariKeJatuhTempo = jatuhTempo ? -diffDaysFromToday(jatuhTempo) : null;
+  // hariKeJatuhTempo: positif = future, negatif = lewat
+  const hasOutstanding = status !== 'Lunas' && sisaTagihan > 0;
+  const isOverdue = hasOutstanding && hariKeJatuhTempo !== null && hariKeJatuhTempo < 0;
+  const isDueSoon = hasOutstanding && hariKeJatuhTempo !== null && hariKeJatuhTempo >= 0 && hariKeJatuhTempo <= 3;
+
+  return { status, totalBayar, sisaTagihan, jatuhTempo, hariKeJatuhTempo, isOverdue, isDueSoon };
 };
 
 export interface BomItem {
@@ -101,6 +166,8 @@ export interface BengkelSettings {
   namaPemilik: string;
   jabatanPemilik: string;
   logoUrl?: string;
+  /** Termin pembayaran default untuk WO baru (hari). 0 = COD. Default: 0. */
+  defaultTerminHari?: number;
 }
 
 const SETTINGS_KEY = 'altro_bengkel_settings';
@@ -115,6 +182,7 @@ const defaultSettings: BengkelSettings = {
   npwp: '',
   namaPemilik: '',
   jabatanPemilik: 'Pimpinan',
+  defaultTerminHari: 0,
 };
 
 export function loadBengkelSettings(): BengkelSettings {
@@ -683,36 +751,51 @@ export const useStore = create<AppState>((set) => ({
     const justFinished = (updatedWo.status === 'Finished' || updatedWo.status === 'Picked Up')
       && prevWo?.status !== 'Finished' && prevWo?.status !== 'Picked Up';
 
+    // Auto-set tanggalInvoice saat pertama kali transit ke Finished/Picked Up.
+    // Bisa di-override manual oleh user, dan tidak berubah saat re-print.
+    const finalWo: WorkOrder = (justFinished && !updatedWo.tanggalInvoice && updatedWo.estimatedCost > 0)
+      ? { ...updatedWo, tanggalInvoice: new Date().toISOString().slice(0, 10) }
+      : updatedWo;
+
     const newCustomers = [...state.customers];
-    if (!newCustomers.some(c => c.perusahaan.toLowerCase() === updatedWo.customer.toLowerCase() || c.nama.toLowerCase() === updatedWo.customer.toLowerCase())) {
+    if (!newCustomers.some(c => c.perusahaan.toLowerCase() === finalWo.customer.toLowerCase() || c.nama.toLowerCase() === finalWo.customer.toLowerCase())) {
       const maxId = newCustomers.reduce((max, c) => { const n = parseInt(c.id.split('-').at(-1) || '0', 10); return !isNaN(n) && n > max ? n : max; }, 0);
-      const newCus = { id: `CUS-${String(maxId + 1).padStart(3, '0')}`, nama: '-', perusahaan: updatedWo.customer, telepon: '-', alamat: '-', totalWo: 0 };
+      const newCus = { id: `CUS-${String(maxId + 1).padStart(3, '0')}`, nama: '-', perusahaan: finalWo.customer, telepon: '-', alamat: '-', totalWo: 0 };
       newCustomers.push(newCus);
       db.customers.upsert(newCus);
     }
 
     const newFinance = [...state.finance];
-    if (justFinished && updatedWo.estimatedCost > 0) {
-      const alreadyRecorded = newFinance.some(f => f.deskripsi.includes(updatedWo.id));
+    // Auto-record pelunasan HANYA bila termin = COD (lunas di tempat).
+    // Untuk WO dengan termin (NET 7/14/30 dst), pelunasan dicatat manual oleh
+    // user lewat halaman Finance (atau action "Catat Lunas" di tab Piutang).
+    const isCOD = (finalWo.terminHari ?? 0) === 0;
+    if (justFinished && isCOD && finalWo.estimatedCost > 0) {
+      // Cek duplikat pakai woId (post-migrasi) ATAU substring (legacy)
+      const alreadyRecorded = newFinance.some(f =>
+        f.woId === finalWo.id || (!f.woId && f.deskripsi.includes(finalWo.id))
+      );
       if (!alreadyRecorded) {
         const maxId = newFinance.reduce((max, f) => { const n = parseInt(f.id.split('-').at(-1) || '0', 10); return !isNaN(n) && n > max ? n : max; }, 0);
-        const newTrx = {
+        const newTrx: FinanceTransaction = {
           id: `TRX-${String(maxId + 1).padStart(4, '0')}`,
           tanggal: new Date().toISOString().split('T')[0],
           kategori: 'Pemasukan',
           subKategori: 'Pembayaran Servis',
-          deskripsi: `Pelunasan - ${updatedWo.id} (${updatedWo.customer})`,
-          nominal: updatedWo.estimatedCost,
+          deskripsi: `Pelunasan - ${finalWo.id} (${finalWo.customer})`,
+          nominal: finalWo.estimatedCost,
+          woId: finalWo.id,    // Phase 5: link FK eksplisit
         };
         newFinance.push(newTrx);
         db.finance.upsert(newTrx);
       }
     }
 
-    db.workOrders.upsert(updatedWo);
-    if (justFinished) toast.success(`WO ${updatedWo.id} selesai & dicatat ke keuangan.`);
+    db.workOrders.upsert(finalWo);
+    if (justFinished && isCOD) toast.success(`WO ${finalWo.id} selesai & dicatat ke keuangan.`);
+    else if (justFinished) toast.success(`WO ${finalWo.id} selesai. Termin ${finalWo.terminHari} hari — catat pelunasan saat dibayar.`);
     return {
-      workOrders: state.workOrders.map(wo => wo.id === updatedWo.id ? updatedWo : wo),
+      workOrders: state.workOrders.map(wo => wo.id === finalWo.id ? finalWo : wo),
       customers: newCustomers,
       finance: newFinance,
     };
@@ -725,9 +808,13 @@ export const useStore = create<AppState>((set) => ({
       newCustomers.push(newCus);
       db.customers.upsert(newCus);
     }
-    db.workOrders.upsert(wo);
-    toast.success(`SPK ${wo.id} berhasil dibuat.`);
-    return { workOrders: [...state.workOrders, wo], customers: newCustomers };
+    // Apply default termin dari settings kalau WO belum spesifikasi
+    const woWithDefaults: WorkOrder = wo.terminHari === undefined
+      ? { ...wo, terminHari: state.bengkelSettings.defaultTerminHari ?? 0 }
+      : wo;
+    db.workOrders.upsert(woWithDefaults);
+    toast.success(`SPK ${woWithDefaults.id} berhasil dibuat.`);
+    return { workOrders: [...state.workOrders, woWithDefaults], customers: newCustomers };
   }),
   deleteWorkOrder: (id) => {
     db.workOrders.delete(id); // cascade ke boms & services di DB

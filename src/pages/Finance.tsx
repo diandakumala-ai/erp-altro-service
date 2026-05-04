@@ -67,7 +67,7 @@ function SubKategoriCell({ value, onSave, kategori }: { value: string; onSave: (
 
 function DeskripsiCell({ value, onSave, onFill, kategori }: {
   value: string; onSave: (v: string) => void;
-  onFill: (label: string, nominal: number) => void;
+  onFill: (label: string, nominal: number, woId?: string) => void;
   kategori: string;
 }) {
   const workOrders = useStore(s => s.workOrders);
@@ -82,13 +82,18 @@ function DeskripsiCell({ value, onSave, onFill, kategori }: {
     ? workOrders.flatMap(wo => {
         // Tagihan efektif = estimatedCost dikurangi diskon
         const effectiveTotal = Math.max((wo.estimatedCost || 0) - (wo.diskon || 0), 0);
+        // Hitung DP paid pakai woId dulu (post-migrasi), fallback ke substring match
         const dpPaid = finance
-          .filter(f => f.deskripsi.includes(`Pembayaran DP`) && f.deskripsi.includes(wo.id) && f.nominal > 0)
+          .filter(f =>
+            f.kategori === 'Pemasukan' && f.nominal > 0 &&
+            (f.subKategori === 'DP' || f.deskripsi.includes('Pembayaran DP')) &&
+            (f.woId === wo.id || (!f.woId && f.deskripsi.includes(wo.id)))
+          )
           .reduce((sum, f) => sum + f.nominal, 0);
         const remaining = Math.max(effectiveTotal - dpPaid, 0);
         return [
-          { label: `Pembayaran DP - ${wo.id} (${wo.customer})`, nominal: Math.round(effectiveTotal * 0.5), type: 'dp' as const },
-          { label: `Pelunasan - ${wo.id} (${wo.customer})`, nominal: remaining, type: 'lunas' as const },
+          { label: `Pembayaran DP - ${wo.id} (${wo.customer})`, nominal: Math.round(effectiveTotal * 0.5), type: 'dp' as const, woId: wo.id },
+          { label: `Pelunasan - ${wo.id} (${wo.customer})`, nominal: remaining, type: 'lunas' as const, woId: wo.id },
         ];
       })
     : [];
@@ -144,7 +149,7 @@ function DeskripsiCell({ value, onSave, onFill, kategori }: {
               <button key={idx}
                 className="w-full text-left px-3 py-2.5 text-xs hover:bg-indigo-50 transition-colors border-b border-slate-50 last:border-0"
                 onMouseDown={e => e.preventDefault()}
-                onClick={() => { onFill(s.label, s.nominal); setShowDropdown(false); }}>
+                onClick={() => { onFill(s.label, s.nominal, s.woId); setShowDropdown(false); }}>
                 <div className="flex items-center justify-between">
                   <div>
                     <span className={`font-bold ${s.type === 'dp' ? 'text-amber-600' : 'text-emerald-600'}`}>
@@ -589,7 +594,12 @@ export default function Finance() {
                             <DeskripsiCell
                               value={trx.deskripsi}
                               onSave={v => update(trx, 'deskripsi', v)}
-                              onFill={(label, nominal) => updateFinance({ ...trx, deskripsi: label, nominal: trx.kategori === 'Pengeluaran' ? -Math.abs(nominal) : Math.abs(nominal) })}
+                              onFill={(label, nominal, woId) => updateFinance({
+                                ...trx,
+                                deskripsi: label,
+                                nominal: trx.kategori === 'Pengeluaran' ? -Math.abs(nominal) : Math.abs(nominal),
+                                woId: woId ?? trx.woId,    // Phase 5: link FK kalau dari WO
+                              })}
                               kategori={trx.kategori}
                             />
                           </td>
@@ -911,6 +921,7 @@ export default function Finance() {
                                   deskripsi: `Pelunasan - ${wo.id} (${wo.customer})`,
                                   nominal: info.sisaTagihan,
                                   catatan: '',
+                                  woId: wo.id,    // Phase 5: link FK eksplisit
                                 });
                                 setActiveTab('table');
                               }}
