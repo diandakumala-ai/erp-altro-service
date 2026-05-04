@@ -3,39 +3,13 @@ import { useStore, computeStatusBayar } from '../store/useStore';
 import {
   Wrench, Package, TrendingUp, TrendingDown, AlertTriangle,
   Clock, CheckCircle, Users, ArrowRight, Activity,
-  Eye, FlaskConical, PackageCheck
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { StatusPill, WO_STATUS, isFinished } from '../components/ui';
+import { fmt, fmtShort } from '../lib/format';
 
-// ── Status Pill terpusat dengan ikon (WCAG color-only fix) ───────────────────
-const STATUS_CONFIG: Record<string, { bg: string; icon: React.ElementType }> = {
-  'Queue':      { bg: 'bg-slate-100 text-slate-600',   icon: Clock },
-  'Inspecting': { bg: 'bg-yellow-100 text-yellow-700', icon: Eye },
-  'Repairing':  { bg: 'bg-blue-100 text-blue-700',     icon: Wrench },
-  'Testing':    { bg: 'bg-purple-100 text-purple-700', icon: FlaskConical },
-  'Finished':   { bg: 'bg-green-100 text-green-700',   icon: CheckCircle },
-  'Picked Up':  { bg: 'bg-teal-100 text-teal-700',     icon: PackageCheck },
-};
-
-export function StatusPill({ status, size = 'sm' }: { status: string; size?: 'xs' | 'sm' }) {
-  const cfg = STATUS_CONFIG[status] ?? { bg: 'bg-slate-100 text-slate-600', icon: Clock };
-  const Icon = cfg.icon;
-  const textSize = size === 'xs' ? 'text-2xs' : 'text-xs';
-  const iconSize = size === 'xs' ? 'w-2.5 h-2.5' : 'w-3 h-3';
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold ${textSize} ${cfg.bg}`}>
-      <Icon className={`${iconSize} shrink-0`} />
-      {status}
-    </span>
-  );
-}
-
-const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(n);
-const fmtShort = (n: number) => {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)} Jt`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(0)} Rb`;
-  return String(n);
-};
+// Re-export untuk backward compatibility (WorkOrders.tsx pakai ini)
+export { StatusPill };
 
 function KpiCard({
   title, value, sub, icon: Icon, color, to
@@ -69,8 +43,8 @@ export default function Dashboard() {
   const thisMonth = today.slice(0, 7);
 
   const stats = useMemo(() => {
-    const aktif = workOrders.filter(w => !['Finished', 'Picked Up'].includes(w.status));
-    const selesai = workOrders.filter(w => ['Finished', 'Picked Up'].includes(w.status));
+    const aktif = workOrders.filter(w => !isFinished(w.status));
+    const selesai = workOrders.filter(w => isFinished(w.status));
     const overdue = aktif.filter(w => w.estimasiSelesai !== '-' && w.estimasiSelesai < today);
 
     const stokKritis = inventory.filter(i => i.stok <= i.batasMinimum);
@@ -117,19 +91,9 @@ export default function Dashboard() {
 
   const maxChart = Math.max(...stats.chartData.map(d => Math.max(d.pemasukan, d.pengeluaran)), 1);
 
-  // statusColor masih digunakan untuk chart progress bar section
-  const statusColor: Record<string, string> = {
-    'Queue': 'bg-slate-100 text-slate-600',
-    'Inspecting': 'bg-yellow-100 text-yellow-700',
-    'Repairing': 'bg-blue-100 text-blue-700',
-    'Testing': 'bg-purple-100 text-purple-700',
-    'Finished': 'bg-green-100 text-green-700',
-    'Picked Up': 'bg-teal-100 text-teal-700',
-  };
-
   return (
     <div className="flex-1 flex flex-col bg-slate-50 overflow-hidden">
-      <header className="bg-white border-b border-slate-200 h-12 flex items-center px-6 justify-between shrink-0">
+      <header className="bg-white border-b border-slate-200 h-12 flex items-center pl-14 pr-4 lg:px-6 justify-between shrink-0">
         <h2 className="text-base font-semibold text-slate-800">Dashboard</h2>
         <p className="text-xs text-slate-400">
           {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
@@ -164,7 +128,7 @@ export default function Dashboard() {
             value={`Rp ${fmtShort(stats.revBulanIni)}`}
             sub={`Pengeluaran: Rp ${fmtShort(stats.expBulanIni)}`}
             icon={TrendingUp}
-            color="bg-green-100 text-green-600"
+            color="bg-emerald-100 text-emerald-600"
             to="/finance"
           />
           <KpiCard
@@ -199,22 +163,30 @@ export default function Dashboard() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-slate-800 text-sm">Arus Kas 6 Bulan Terakhir</h3>
               <div className="flex items-center gap-3 text-xs text-slate-500">
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-green-400 inline-block" />Pemasukan</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-emerald-400 inline-block" />Pemasukan</span>
                 <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-300 inline-block" />Pengeluaran</span>
               </div>
             </div>
-            <div className="flex items-end gap-3 h-44">
+            <div role="img" aria-label="Diagram batang arus kas 6 bulan terakhir" className="flex items-end gap-3 h-44">
               {stats.chartData.map((d) => (
                 <div key={d.label} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="w-full flex items-end gap-1 h-36">
+                  <div
+                    className="w-full flex items-end gap-1 h-36 group relative"
+                    title={`${d.label}: pemasukan Rp ${fmt(d.pemasukan)}, pengeluaran Rp ${fmt(d.pengeluaran)}`}
+                  >
+                    {/* Tooltip yang juga bisa difokus dengan tab — accessible alternative */}
+                    <div className="absolute -top-12 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity bg-slate-800 text-white text-2xs px-2 py-1 rounded shadow-lg whitespace-nowrap pointer-events-none">
+                      <div className="text-emerald-300">+ Rp {fmt(d.pemasukan)}</div>
+                      <div className="text-red-300">− Rp {fmt(d.pengeluaran)}</div>
+                    </div>
                     <div
-                      className="flex-1 bg-green-400 rounded-t-md transition-all duration-500 hover:bg-green-500"
-                      title={`Pemasukan: Rp ${fmt(d.pemasukan)}`}
+                      className="flex-1 bg-emerald-400 rounded-t-md transition-all duration-500 hover:bg-emerald-500"
+                      aria-label={`${d.label} pemasukan Rp ${fmt(d.pemasukan)}`}
                       style={{ height: `${maxChart > 0 ? (d.pemasukan / maxChart) * 100 : 0}%`, minHeight: d.pemasukan > 0 ? '4px' : '0' }}
                     />
                     <div
                       className="flex-1 bg-red-300 rounded-t-md transition-all duration-500 hover:bg-red-400"
-                      title={`Pengeluaran: Rp ${fmt(d.pengeluaran)}`}
+                      aria-label={`${d.label} pengeluaran Rp ${fmt(d.pengeluaran)}`}
                       style={{ height: `${maxChart > 0 ? (d.pengeluaran / maxChart) * 100 : 0}%`, minHeight: d.pengeluaran > 0 ? '4px' : '0' }}
                     />
                   </div>
@@ -230,7 +202,7 @@ export default function Dashboard() {
               <Activity className="w-4 h-4 text-indigo-500" /> Status WO
             </h3>
             <div className="space-y-2">
-              {['Queue', 'Inspecting', 'Repairing', 'Testing', 'Finished', 'Picked Up'].map(s => {
+              {WO_STATUS.map(s => {
                 const count = workOrders.filter(w => w.status === s).length;
                 const pct = workOrders.length > 0 ? Math.round((count / workOrders.length) * 100) : 0;
                 return (
@@ -283,7 +255,7 @@ export default function Dashboard() {
             </div>
             {stats.stokKritis.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-6 text-slate-400 gap-2">
-                <CheckCircle className="w-8 h-8 text-green-400" />
+                <CheckCircle className="w-8 h-8 text-emerald-400" />
                 <p className="text-sm">Semua stok dalam kondisi aman.</p>
               </div>
             ) : (

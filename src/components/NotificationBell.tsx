@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom';
 import { Bell, Package, X, Clock, DollarSign } from 'lucide-react';
 import { useStore, computeStatusBayar } from '../store/useStore';
 import { Link } from 'react-router-dom';
-
-const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(n);
+import { fmt } from '../lib/format';
+import { isFinished } from './ui';
 
 interface NotifItem {
   id: string;
@@ -75,7 +75,7 @@ export function NotificationBell() {
     // WO Overdue
     const overdueItems: NotifItem[] = workOrders
       .filter(w =>
-        !['Finished', 'Picked Up'].includes(w.status) &&
+        !isFinished(w.status) &&
         w.estimasiSelesai !== '-' &&
         w.estimasiSelesai < today
       )
@@ -217,7 +217,7 @@ export function NotificationBell() {
       {open && createPortal(
         <div
           id="notif-dropdown"
-          style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, zIndex: 9999 }}
+          style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, zIndex: 'var(--z-dropdown)' }}
           className="w-80 bg-white border border-slate-200 rounded-xl shadow-2xl flex flex-col overflow-hidden"
         >
           {/* Header */}
@@ -243,8 +243,8 @@ export function NotificationBell() {
           {/* Body */}
           {totalCount === 0 ? (
             <div className="py-10 text-center">
-              <div className="w-12 h-12 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-3">
-                <Bell className="w-5 h-5 text-green-400" />
+              <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Bell className="w-5 h-5 text-emerald-400" />
               </div>
               <p className="text-sm font-semibold text-slate-500">Semua Beres!</p>
               <p className="text-xs text-slate-400 mt-0.5">Tidak ada notifikasi saat ini</p>
@@ -252,7 +252,7 @@ export function NotificationBell() {
           ) : (
             <div className="overflow-y-auto divide-y divide-slate-100" style={{ maxHeight: 380 }}>
               <NotifSection
-                label="WO Terlambat"
+                label="SPK Terlambat"
                 icon={Clock}
                 color="bg-red-50 text-red-600"
                 items={overdueItems}

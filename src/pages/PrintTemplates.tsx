@@ -127,9 +127,9 @@ export default function PrintTemplates() {
           </div>
 
           <div className="grid grid-cols-3 gap-4 mb-7">
-            <div className="border-2 border-green-200 bg-green-50 rounded-lg p-4 text-center">
-              <p className="text-2xs font-bold text-green-600 uppercase tracking-widest mb-1">Total Pemasukan</p>
-              <p className="text-xl font-black text-green-800">Rp {fmt(totalPemasukan)}</p>
+            <div className="border-2 border-emerald-200 bg-emerald-50 rounded-lg p-4 text-center">
+              <p className="text-2xs font-bold text-emerald-600 uppercase tracking-widest mb-1">Total Pemasukan</p>
+              <p className="text-xl font-black text-emerald-800">Rp {fmt(totalPemasukan)}</p>
             </div>
             <div className="border-2 border-red-200 bg-red-50 rounded-lg p-4 text-center">
               <p className="text-2xs font-bold text-red-600 uppercase tracking-widest mb-1">Total Pengeluaran</p>
@@ -144,7 +144,7 @@ export default function PrintTemplates() {
           <div className="grid grid-cols-2 gap-5 mb-7">
             <div>
               <h3 className="text-sm font-bold text-slate-700 border-b border-slate-200 pb-1 mb-3 flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" /> Rincian Pemasukan
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Rincian Pemasukan
               </h3>
               <table className="w-full text-xs"><tbody>
                 {subsPemasukan.map(({ sub, total }) => (
@@ -153,9 +153,9 @@ export default function PrintTemplates() {
                     <td className="py-1.5 text-right font-semibold text-slate-800">Rp {fmt(total)}</td>
                   </tr>
                 ))}
-              </tbody><tfoot><tr className="border-t-2 border-green-300">
-                <td className="py-2 font-bold text-green-800">Total</td>
-                <td className="py-2 text-right font-black text-green-800">Rp {fmt(totalPemasukan)}</td>
+              </tbody><tfoot><tr className="border-t-2 border-emerald-300">
+                <td className="py-2 font-bold text-emerald-800">Total</td>
+                <td className="py-2 text-right font-black text-emerald-800">Rp {fmt(totalPemasukan)}</td>
               </tr></tfoot></table>
             </div>
             <div>
@@ -192,7 +192,7 @@ export default function PrintTemplates() {
                   <td className="py-1.5 px-3">{t.kategori}</td>
                   <td className="py-1.5 px-3 text-slate-500">{t.subKategori || '-'}</td>
                   <td className="py-1.5 px-3">{t.deskripsi}</td>
-                  <td className={`py-1.5 px-3 text-right font-semibold ${t.nominal >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                  <td className={`py-1.5 px-3 text-right font-semibold ${t.nominal >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
                     {t.nominal >= 0 ? '+' : '-'} {fmt(Math.abs(t.nominal))}
                   </td>
                 </tr>
@@ -228,7 +228,7 @@ export default function PrintTemplates() {
                       <td className="py-1.5 px-3">{wo.customer}</td>
                       <td className="py-1.5 px-3 text-slate-500">{wo.merk}</td>
                       <td className="py-1.5 px-3 text-right">{fmt(Math.max((wo.estimatedCost || 0) - (wo.diskon || 0), 0))}</td>
-                      <td className="py-1.5 px-3 text-right text-green-700">{fmt(info.totalBayar)}</td>
+                      <td className="py-1.5 px-3 text-right text-emerald-700">{fmt(info.totalBayar)}</td>
                       <td className="py-1.5 px-3 text-right font-bold text-amber-700">{fmt(info.sisaTagihan)}</td>
                       <td className="py-1.5 px-3 text-center font-semibold">{info.status}</td>
                     </tr>

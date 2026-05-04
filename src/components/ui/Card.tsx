@@ -23,7 +23,7 @@ interface SectionProps {
   children: ReactNode;
   className?: string;
   /** Warna ikon header — default indigo */
-  accent?: 'indigo' | 'emerald' | 'rose' | 'amber';
+  accent?: 'indigo' | 'emerald' | 'red' | 'amber';
   /** Override class untuk body (default `p-6`). */
   bodyClassName?: string;
 }
@@ -31,7 +31,7 @@ interface SectionProps {
 const ACCENT: Record<NonNullable<SectionProps['accent']>, { bg: string; fg: string }> = {
   indigo:  { bg: 'bg-indigo-50',  fg: 'text-indigo-600'  },
   emerald: { bg: 'bg-emerald-50', fg: 'text-emerald-600' },
-  rose:    { bg: 'bg-rose-50',    fg: 'text-rose-600'    },
+  red:     { bg: 'bg-red-50',     fg: 'text-red-600'     },
   amber:   { bg: 'bg-amber-50',   fg: 'text-amber-600'   },
 };
 

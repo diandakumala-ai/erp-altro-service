@@ -1,12 +1,14 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Plus, Trash2, Search, Download, X, ChevronDown, FileText, BarChart2, BellRing, Printer, Wallet, FileSpreadsheet, Filter as FilterIcon } from 'lucide-react';
+import { Plus, Trash2, Download, X, ChevronDown, FileText, BarChart2, BellRing, Printer, Wallet, FileSpreadsheet, Filter as FilterIcon, Receipt } from 'lucide-react';
 import { useStore, computeStatusBayar, type FinanceTransaction } from '../store/useStore';
 import { exportBukuKas, exportLaporanBulanan, exportPiutang, exportLaporanLengkap } from '../lib/exportExcel';
 import { toast } from '../lib/toast';
-import { Button, DataHeader, DataCell, EmptyRow, type SortDir } from '../components/ui';
+import { Button, DataHeader, DataCell, EmptyRow, EmptyState, StatCard, SearchInput, type SortDir } from '../components/ui';
 import { confirm } from '../lib/confirm';
+import { fmt as fmtNumber } from '../lib/format';
 
-const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(Math.abs(n));
+// Finance memakai versi absolut untuk display (tanda +/− digabung manual)
+const fmt = (n: number) => fmtNumber(Math.abs(n));
 
 function NominalCell({ value, onSave }: { value: number; onSave: (v: string) => void }) {
   const [editing, setEditing] = useState(false);
@@ -19,7 +21,7 @@ function NominalCell({ value, onSave }: { value: number; onSave: (v: string) => 
       onKeyDown={e => { if (e.key === 'Enter') { onSave(val); setEditing(false); } if (e.key === 'Escape') setEditing(false); }} />
   ) : (
     <span
-      className={`cursor-pointer font-semibold transition-colors ${value >= 0 ? 'text-green-600 hover:text-green-700' : 'text-red-600 hover:text-red-700'}`}
+      className={`cursor-pointer font-semibold transition-colors ${value >= 0 ? 'text-emerald-600 hover:text-emerald-700' : 'text-red-600 hover:text-red-700'}`}
       onDoubleClick={() => { setVal(String(Math.abs(value))); setEditing(true); }}>
       {value >= 0 ? '+' : '−'} Rp {fmt(value)}
     </span>
@@ -36,7 +38,7 @@ function KategoriCell({ value, onSave }: { value: string; onSave: (v: string) =>
       <option value="Pengeluaran">Pengeluaran</option>
     </select>
   ) : (
-    <span onDoubleClick={() => setEditing(true)} className={`cursor-pointer inline-block px-2.5 py-0.5 rounded-full text-2xs uppercase tracking-wider font-bold ${value === 'Pemasukan' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+    <span onDoubleClick={() => setEditing(true)} className={`cursor-pointer inline-block px-2.5 py-0.5 rounded-full text-2xs uppercase tracking-wider font-bold ${value === 'Pemasukan' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
       {value}
     </span>
   );
@@ -132,7 +134,7 @@ function DeskripsiCell({ value, onSave, onFill, kategori }: {
           <ChevronDown className="w-3.5 h-3.5" />
         </button>
         {showDropdown && (
-          <div className="absolute left-0 top-6 z-30 bg-white border border-slate-200 rounded-lg shadow-xl w-80 max-h-64 overflow-y-auto">
+          <div className="absolute left-0 top-6 bg-white border border-slate-200 rounded-lg shadow-xl w-80 max-h-64 overflow-y-auto" style={{ zIndex: 'var(--z-dropdown)' }}>
             <p className="px-3 py-1.5 text-2xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
               {kategori === 'Pemasukan' ? 'Pilih dari Work Order' : 'Pilih dari Inventory'}
             </p>
@@ -145,13 +147,13 @@ function DeskripsiCell({ value, onSave, onFill, kategori }: {
                 onClick={() => { onFill(s.label, s.nominal); setShowDropdown(false); }}>
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className={`font-bold ${s.type === 'dp' ? 'text-amber-600' : 'text-green-600'}`}>
+                    <span className={`font-bold ${s.type === 'dp' ? 'text-amber-600' : 'text-emerald-600'}`}>
                       {s.type === 'dp' ? '⬡ DP' : '✓ Lunas'}
                     </span>
                     <span className="ml-2 text-slate-600">{s.label.replace(/^(Pembayaran DP|Pelunasan) - /, '')}</span>
                   </div>
-                  <span className={`ml-2 shrink-0 font-semibold ${s.type === 'lunas' ? 'text-green-700' : 'text-amber-700'}`}>
-                    Rp {new Intl.NumberFormat('id-ID').format(s.nominal)}
+                  <span className={`ml-2 shrink-0 font-semibold ${s.type === 'lunas' ? 'text-emerald-700' : 'text-amber-700'}`}>
+                    Rp {fmtNumber(s.nominal)}
                   </span>
                 </div>
                 {s.type === 'lunas' && s.nominal === 0 && (
@@ -172,7 +174,7 @@ function DeskripsiCell({ value, onSave, onFill, kategori }: {
                     <span className="ml-2 text-slate-600">{s.label.replace(/^Beli Material - /, '')}</span>
                   </div>
                   <span className="ml-2 shrink-0 font-semibold text-slate-500">
-                    Rp {new Intl.NumberFormat('id-ID').format(s.nominal)} / satuan
+                    Rp {fmtNumber(s.nominal)} / satuan
                   </span>
                 </div>
               </button>
@@ -386,20 +388,20 @@ export default function Finance() {
 
   return (
     <div className="flex-1 flex flex-col bg-slate-50 overflow-hidden">
-      <header className="bg-white border-b border-slate-200 h-12 flex items-center px-6 justify-between shrink-0">
+      <header className="bg-white border-b border-slate-200 h-12 flex items-center pl-14 pr-4 lg:px-6 justify-between shrink-0">
         <div className="flex items-center gap-6 overflow-hidden">
           <h2 className="text-base font-semibold text-slate-800 whitespace-nowrap">Manajemen Keuangan (Finance)</h2>
-          <div className="flex bg-slate-100 p-1 rounded-lg overflow-x-auto no-scrollbar">
-            <button onClick={() => setActiveTab('table')} className={`px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 whitespace-nowrap transition-all ${activeTab === 'table' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-              <FileText className="w-4 h-4" /> Buku Kas
+          <div role="tablist" aria-label="Tab Finance" className="flex bg-slate-100 p-1 rounded-lg overflow-x-auto no-scrollbar relative">
+            <button role="tab" aria-selected={activeTab === 'table'} onClick={() => setActiveTab('table')} className={`px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 whitespace-nowrap transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 ${activeTab === 'table' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+              <FileText className="w-4 h-4" aria-hidden="true" /> Buku Kas
             </button>
-            <button onClick={() => setActiveTab('report')} className={`px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 whitespace-nowrap transition-all ${activeTab === 'report' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-              <BarChart2 className="w-4 h-4" /> Laporan Laba Rugi
+            <button role="tab" aria-selected={activeTab === 'report'} onClick={() => setActiveTab('report')} className={`px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 whitespace-nowrap transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 ${activeTab === 'report' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+              <BarChart2 className="w-4 h-4" aria-hidden="true" /> Laporan Laba Rugi
             </button>
-            <button onClick={() => setActiveTab('piutang')} className={`px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 whitespace-nowrap transition-all ${activeTab === 'piutang' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-              <Wallet className="w-4 h-4" /> Piutang
+            <button role="tab" aria-selected={activeTab === 'piutang'} onClick={() => setActiveTab('piutang')} className={`px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 whitespace-nowrap transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 ${activeTab === 'piutang' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+              <Wallet className="w-4 h-4" aria-hidden="true" /> Piutang
               {piutangList.length > 0 && (
-                <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-2xs font-bold">{piutangList.length}</span>
+                <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-2xs font-bold" aria-label={`${piutangList.length} piutang`}>{piutangList.length}</span>
               )}
             </button>
           </div>
@@ -456,46 +458,32 @@ export default function Finance() {
         {/* Tab Content: Buku Kas (Table) */}
         {activeTab === 'table' && (
           <>
-            <div className="grid grid-cols-5 gap-3 shrink-0">
-              <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Pemasukan Bulan Ini</p>
-                <h3 className="text-base font-bold text-green-600">Rp {fmt(pemasukanBulanIni)}</h3>
-              </div>
-              <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Pengeluaran Bulan Ini</p>
-                <h3 className="text-base font-bold text-red-600">Rp {fmt(pengeluaranBulanIni)}</h3>
-              </div>
-              <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Total Pemasukan</p>
-                <h3 className="text-base font-bold text-green-700">Rp {fmt(totalPemasukan)}</h3>
-              </div>
-              <button onClick={() => setActiveTab('piutang')}
-                title="Lihat detail piutang"
-                className={`text-left bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between hover:bg-amber-50 transition-colors ${piutangList.length > 0 ? 'border-l-4 border-l-amber-500' : ''}`}>
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1">
-                  Piutang Belum Lunas
-                  {piutangList.length > 0 && <span className="text-3xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">{piutangList.length} WO</span>}
-                </p>
-                <h3 className={`text-base font-bold ${piutangList.length > 0 ? 'text-amber-700' : 'text-slate-400'}`}>
-                  Rp {fmt(totalPiutang)}
-                </h3>
-              </button>
-              <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm border-l-4 border-l-indigo-500 flex flex-col justify-between">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Saldo Kas Keseluruhan</p>
-                <h3 className={`text-base font-bold ${saldo >= 0 ? 'text-indigo-700' : 'text-red-600'}`}>
-                  Rp {fmt(saldo)}{saldo < 0 && ' (Minus)'}
-                </h3>
-              </div>
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 shrink-0">
+              <StatCard label="Pemasukan Bulan Ini" value={`Rp ${fmt(pemasukanBulanIni)}`} accent="emerald" />
+              <StatCard label="Pengeluaran Bulan Ini" value={`Rp ${fmt(pengeluaranBulanIni)}`} accent="red" />
+              <StatCard label="Total Pemasukan" value={`Rp ${fmt(totalPemasukan)}`} accent="emerald" />
+              <StatCard
+                label="Piutang Belum Lunas"
+                value={`Rp ${fmt(totalPiutang)}`}
+                hint={piutangList.length > 0 ? `${piutangList.length} WO belum lunas` : 'Semua lunas'}
+                accent={piutangList.length > 0 ? 'amber' : 'slate'}
+                onClick={() => setActiveTab('piutang')}
+              />
+              <StatCard
+                label="Saldo Kas Keseluruhan"
+                value={`Rp ${fmt(saldo)}${saldo < 0 ? ' (−)' : ''}`}
+                accent={saldo >= 0 ? 'indigo' : 'red'}
+              />
             </div>
 
             <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col overflow-hidden">
               {/* Toolbar */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0 gap-3">
-                <div className="relative flex-1 max-w-xs">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input type="text" placeholder="Cari transaksi..." aria-label="Cari transaksi" value={search} onChange={e => setSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 bg-slate-50 placeholder:text-slate-400" />
-                </div>
+              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0 gap-3 flex-wrap">
+                <SearchInput
+                  value={search} onChange={setSearch}
+                  placeholder="Cari ID, deskripsi, sub-kategori..." ariaLabel="Cari transaksi"
+                  className="flex-1 max-w-xs"
+                />
                 <div className="flex gap-2 shrink-0">
                   <Button
                     variant={showFilter ? 'primary' : 'secondary'}
@@ -545,7 +533,7 @@ export default function Finance() {
               {/* Table */}
               <div className="flex-1 overflow-auto">
                 <table className="w-full text-sm border-collapse min-w-[1100px]">
-                  <thead className="bg-slate-50 sticky top-0 z-10">
+                  <thead className="bg-slate-50 sticky top-0" style={{ zIndex: 'var(--z-sticky)' }}>
                     <tr className="border-b border-slate-200">
                       <DataHeader label="Tanggal" field="tanggal" w="w-32" {...thProps} />
                       <DataHeader label="Kategori" field="kategori" w="w-24" {...thProps} />
@@ -553,12 +541,41 @@ export default function Finance() {
                       <DataHeader label="Deskripsi Transaksi" field="deskripsi" {...thProps} />
                       <DataHeader label="Catatan" field="catatan" w="w-48" {...thProps} />
                       <DataHeader label="Nominal (Rp)" field="nominal" w="w-36" {...thProps} />
-                      <DataHeader label="Saldo Berjalan" w="w-36" {...thProps} />
+                      <DataHeader
+                        label={search || activeFilterCount > 0 ? 'Saldo Berjalan*' : 'Saldo Berjalan'}
+                        w="w-36" {...thProps}
+                      />
                       <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-16">Aksi</th>
                     </tr>
                   </thead>
                   <tbody ref={tableBodyRef}>
-                    {filtered.length === 0 && <EmptyRow colSpan={8} message="Tidak ada data ditemukan." />}
+                    {filtered.length === 0 && (
+                      <EmptyRow colSpan={8} message={
+                        search || activeFilterCount > 0 ? (
+                          <EmptyState
+                            icon={Receipt}
+                            title="Tidak ada transaksi yang cocok"
+                            description={search ? `Tidak ditemukan untuk "${search}".` : 'Coba ubah filter aktif.'}
+                            action={
+                              <Button variant="secondary" size="md" onClick={() => { setSearch(''); clearFilters(); }}>
+                                Reset filter
+                              </Button>
+                            }
+                          />
+                        ) : (
+                          <EmptyState
+                            icon={Receipt}
+                            title="Belum ada transaksi"
+                            description="Catat pemasukan atau pengeluaran pertama Anda."
+                            action={
+                              <Button variant="primary" size="md" onClick={handleAdd}>
+                                <Plus className="w-4 h-4" /> Catat Transaksi
+                              </Button>
+                            }
+                          />
+                        )
+                      } />
+                    )}
                     {filtered.map((trx, i) => {
                       const runBal = runningBalanceMap[trx.id] ?? 0;
                       return (
@@ -604,8 +621,11 @@ export default function Finance() {
                   </tbody>
                 </table>
               </div>
-              <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50 shrink-0">
+              <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50 shrink-0 flex justify-between items-center gap-3 flex-wrap">
                 <span className="text-xs text-slate-400">Menampilkan {filtered.length} dari {finance.length} transaksi</span>
+                {(search || activeFilterCount > 0) && (
+                  <span className="text-xs text-slate-400 italic">* Saldo berjalan dihitung dari seluruh data, bukan filter aktif.</span>
+                )}
               </div>
             </div>
           </>
@@ -636,10 +656,10 @@ export default function Finance() {
             </div>
 
             {/* KPI Bulan Dipilih */}
-            <div className="grid grid-cols-3 gap-3 shrink-0">
-              <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 border-l-4 border-l-green-500">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
+              <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 border-l-4 border-l-emerald-500">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Total Pemasukan</p>
-                <p className="text-2xl font-black text-green-600">Rp {fmt(reportPemasukan)}</p>
+                <p className="text-2xl font-black text-emerald-600">Rp {fmt(reportPemasukan)}</p>
                 <p className="text-xs text-slate-400 mt-1">{subPemasukan.length} sub-kategori</p>
               </div>
               <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 border-l-4 border-l-red-500">
@@ -656,11 +676,11 @@ export default function Finance() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Breakdown Pemasukan */}
               <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
                 <h3 className="text-sm font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full bg-green-500 inline-block" />
+                  <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
                   Rincian Pemasukan — {reportLabel}
                 </h3>
                 {subPemasukan.length === 0 ? (
@@ -676,14 +696,14 @@ export default function Finance() {
                             <span className="font-semibold text-slate-800">Rp {fmt(total)} <span className="text-slate-400 font-normal">({pct.toFixed(0)}%)</span></span>
                           </div>
                           <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                            <div className="h-full bg-green-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                            <div className="h-full bg-emerald-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
                           </div>
                         </div>
                       );
                     })}
                     <div className="pt-2 border-t border-slate-100 flex justify-between text-sm font-bold">
                       <span className="text-slate-600">Total</span>
-                      <span className="text-green-700">Rp {fmt(reportPemasukan)}</span>
+                      <span className="text-emerald-700">Rp {fmt(reportPemasukan)}</span>
                     </div>
                   </div>
                 )}
@@ -727,7 +747,7 @@ export default function Finance() {
               <h3 className="text-sm font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100 flex items-center justify-between">
                 <span>Tren Laba Rugi (6 Bulan Terakhir)</span>
                 <div className="flex items-center gap-3 text-xs font-normal text-slate-400">
-                  <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-green-500 inline-block" /> Pemasukan</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-emerald-500 inline-block" /> Pemasukan</span>
                   <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-red-500 inline-block" /> Pengeluaran</span>
                 </div>
               </h3>
@@ -739,16 +759,16 @@ export default function Finance() {
                   return (
                     <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end group relative">
                       <div className="absolute -top-14 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white text-2xs py-1.5 px-2.5 rounded whitespace-nowrap pointer-events-none z-10 shadow-lg">
-                        <p className="text-green-300 font-bold">+Rp {fmt(m.pem)}</p>
+                        <p className="text-emerald-300 font-bold">+Rp {fmt(m.pem)}</p>
                         <p className="text-red-300 font-bold">-Rp {fmt(m.peng)}</p>
                         <p className={`font-bold border-t border-slate-600 mt-1 pt-1 ${net >= 0 ? 'text-indigo-300' : 'text-orange-300'}`}>Laba: Rp {fmt(net)}</p>
                       </div>
                       <div className="flex items-end gap-0.5 w-full h-36">
-                        <div className="flex-1 bg-green-500 rounded-t hover:bg-green-400 transition-colors" style={{ height: `${pemH}%`, minHeight: m.pem > 0 ? '3px' : '0' }} />
+                        <div className="flex-1 bg-emerald-500 rounded-t hover:bg-emerald-400 transition-colors" style={{ height: `${pemH}%`, minHeight: m.pem > 0 ? '3px' : '0' }} />
                         <div className="flex-1 bg-red-500 rounded-t hover:bg-red-400 transition-colors" style={{ height: `${pengH}%`, minHeight: m.peng > 0 ? '3px' : '0' }} />
                       </div>
                       <span className="text-2xs font-medium text-slate-400">{m.label}</span>
-                      <span className={`text-3xs font-bold px-1.5 py-0.5 rounded-full ${net >= 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                      <span className={`text-3xs font-bold px-1.5 py-0.5 rounded-full ${net >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
                         {net >= 0 ? '+' : ''}Rp {fmt(net)}
                       </span>
                     </div>
@@ -782,13 +802,13 @@ export default function Finance() {
                         <tr key={t.id} className={`border-b border-slate-100 ${i % 2 === 1 ? 'bg-slate-50/50' : ''}`}>
                           <td className="px-4 py-2 text-slate-500 text-xs">{t.tanggal}</td>
                           <td className="px-4 py-2">
-                            <span className={`text-2xs font-bold px-2 py-0.5 rounded-full ${t.nominal > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            <span className={`text-2xs font-bold px-2 py-0.5 rounded-full ${t.nominal > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                               {t.kategori}
                             </span>
                           </td>
                           <td className="px-4 py-2 text-xs text-slate-500">{t.subKategori || '-'}</td>
                           <td className="px-4 py-2 text-slate-700 text-xs">{t.deskripsi}</td>
-                          <td className={`px-4 py-2 text-right font-semibold text-xs ${t.nominal >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          <td className={`px-4 py-2 text-right font-semibold text-xs ${t.nominal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                             {t.nominal >= 0 ? '+' : '-'} Rp {fmt(Math.abs(t.nominal))}
                           </td>
                         </tr>
@@ -812,7 +832,7 @@ export default function Finance() {
         {/* Tab Content: Piutang */}
         {activeTab === 'piutang' && (
           <div className="flex-1 overflow-auto flex flex-col gap-4">
-            <div className="grid grid-cols-3 gap-3 shrink-0">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
               <div className="bg-white px-4 py-3 rounded-lg border border-slate-200 shadow-sm border-l-4 border-l-amber-500">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Total Piutang</p>
                 <h3 className="text-lg font-bold text-amber-700">Rp {fmt(totalPiutang)}</h3>
@@ -867,7 +887,7 @@ export default function Finance() {
                               <span className="block text-2xs text-amber-500 font-normal">diskon Rp {fmt(wo.diskon!)}</span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-right font-medium text-green-600">Rp {fmt(info.totalBayar)}</td>
+                          <td className="px-4 py-3 text-right font-medium text-emerald-600">Rp {fmt(info.totalBayar)}</td>
                           <td className="px-4 py-3 text-right font-bold text-amber-700">Rp {fmt(info.sisaTagihan)}</td>
                           <td className="px-4 py-3 text-center">
                             <span className={`inline-block px-2 py-0.5 rounded-full text-2xs uppercase tracking-wider font-bold border ${

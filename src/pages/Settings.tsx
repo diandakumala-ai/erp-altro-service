@@ -36,7 +36,7 @@ function FormField({
 /** Wrapper Section local — pakai shared UISection dengan grid 2 kolom default. */
 function Section({ title, icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) {
   return (
-    <UISection title={title} icon={icon} bodyClassName="p-6 grid grid-cols-2 gap-5">
+    <UISection title={title} icon={icon} bodyClassName="p-6 grid grid-cols-1 sm:grid-cols-2 gap-5">
       {children}
     </UISection>
   );
@@ -160,10 +160,10 @@ function PasswordChangePanel() {
   };
 
   return (
-    <UISection title="Akun & Keamanan" icon={ShieldCheck} accent="rose"
+    <UISection title="Akun & Keamanan" icon={ShieldCheck} accent="red"
       rightSlot={<span className="text-tiny text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Ganti Password</span>}
       bodyClassName="p-0">
-      <form onSubmit={handleSubmit} className="p-6 grid grid-cols-2 gap-5">
+      <form onSubmit={handleSubmit} className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-5">
         {/* Password lama */}
         <div className="col-span-2">
           <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
@@ -290,7 +290,7 @@ export default function Settings() {
   return (
     <div className="flex-1 flex flex-col bg-slate-50 overflow-hidden">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 h-12 flex items-center px-6 justify-between shrink-0">
+      <header className="bg-white border-b border-slate-200 h-12 flex items-center pl-14 pr-4 lg:px-6 justify-between shrink-0">
         <h2 className="text-base font-semibold text-slate-800">Pengaturan Sistem</h2>
         <div className="flex items-center gap-2">
           {dirty && (

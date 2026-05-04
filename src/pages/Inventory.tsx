@@ -1,10 +1,13 @@
 import { useState, useMemo, useRef } from 'react';
-import { Plus, Trash2, Search, Download, Filter, FileSpreadsheet } from 'lucide-react';
+import { Plus, Trash2, Download, Package, FileSpreadsheet, AlertTriangle } from 'lucide-react';
 import { useStore, type InventoryItem } from '../store/useStore';
 import { exportInventory } from '../lib/exportExcel';
 import { toast } from '../lib/toast';
-import { Button, DataHeader, DataCell, EmptyRow, type SortDir } from '../components/ui';
+import { Button, DataHeader, DataCell, EmptyRow, EmptyState, StatCard, SearchInput, type SortDir } from '../components/ui';
 import { confirm } from '../lib/confirm';
+import { fmt } from '../lib/format';
+
+type StockFilter = 'all' | 'low' | 'out';
 
 export default function Inventory() {
   const inventory     = useStore(s => s.inventory);
@@ -13,6 +16,7 @@ export default function Inventory() {
   const deleteInventory = useStore(s => s.deleteInventory);
 
   const [search, setSearch]     = useState('');
+  const [stockFilter, setStockFilter] = useState<StockFilter>('all');
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDir, setSortDir]   = useState<SortDir>('asc');
   const tableBodyRef = useRef<HTMLTableSectionElement>(null);
@@ -22,6 +26,8 @@ export default function Inventory() {
     let rows = inventory.filter(i =>
       i.id.toLowerCase().includes(q) || i.nama.toLowerCase().includes(q) || i.satuan.toLowerCase().includes(q)
     );
+    if (stockFilter === 'low') rows = rows.filter(i => i.stok < i.batasMinimum);
+    else if (stockFilter === 'out') rows = rows.filter(i => i.stok === 0);
     if (sortField) {
       rows = [...rows].sort((a, b) => {
         const av = String((a as unknown as Record<string, unknown>)[sortField] ?? '');
@@ -30,7 +36,7 @@ export default function Inventory() {
       });
     }
     return rows;
-  }, [inventory, search, sortField, sortDir]);
+  }, [inventory, search, stockFilter, sortField, sortDir]);
 
   const handleSort = (field: string) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -61,13 +67,12 @@ export default function Inventory() {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'Inventory.csv'; a.click();
   };
 
-  const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(n);
   const lowStockCount = inventory.filter(i => i.stok < i.batasMinimum).length;
   const totalNilaiAset = inventory.reduce((acc, i) => acc + i.stok * i.hargaBeli, 0);
 
   return (
     <div className="flex-1 flex flex-col bg-slate-50 overflow-hidden">
-      <header className="bg-white border-b border-slate-200 h-12 flex items-center px-6 justify-between shrink-0">
+      <header className="bg-white border-b border-slate-200 h-12 flex items-center pl-14 pr-4 lg:px-6 justify-between shrink-0">
         <div className="flex items-center gap-3">
           <h2 className="text-base font-semibold text-slate-800">Manajemen Stok (Inventory)</h2>
           {lowStockCount > 0 && (
@@ -86,32 +91,48 @@ export default function Inventory() {
 
       <main className="flex-1 p-4 overflow-hidden flex flex-col gap-3">
         {/* Summary Cards */}
-        <div className="grid grid-cols-3 gap-3 shrink-0">
-          <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm flex items-center justify-between">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Total Suku Cadang</p>
-            <h3 className="text-lg font-bold text-slate-800">{inventory.length} <span className="text-xs font-normal text-slate-500">Jenis</span></h3>
-          </div>
-          <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm border-l-4 border-l-indigo-500 flex items-center justify-between">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Total Nilai Aset</p>
-            <h3 className="text-lg font-bold text-indigo-600">Rp {fmt(totalNilaiAset)}</h3>
-          </div>
-          <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm border-l-4 border-l-red-400 flex items-center justify-between">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Stok Menipis</p>
-            <h3 className={`text-lg font-bold ${lowStockCount > 0 ? 'text-red-600' : 'text-slate-800'}`}>{lowStockCount} <span className="text-xs font-normal text-slate-500">Item</span></h3>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
+          <StatCard label="Total Suku Cadang" value={inventory.length} hint="Jenis barang" />
+          <StatCard label="Total Nilai Aset" value={`Rp ${fmt(totalNilaiAset)}`} hint="Stok × harga beli" accent="indigo" />
+          <StatCard
+            label="Stok Menipis" value={lowStockCount}
+            hint={lowStockCount > 0 ? 'Klik untuk filter' : 'Semua aman'}
+            accent={lowStockCount > 0 ? 'red' : 'slate'}
+            onClick={lowStockCount > 0 ? () => setStockFilter('low') : undefined}
+          />
         </div>
 
         <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col overflow-hidden">
           {/* Toolbar */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0 gap-3">
-            <div className="relative flex-1 max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input type="text" placeholder="Cari barang..." aria-label="Cari barang" value={search} onChange={e => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 bg-slate-50 placeholder:text-slate-400" />
-            </div>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0 gap-3 flex-wrap">
+            <SearchInput
+              value={search} onChange={setSearch}
+              placeholder="Cari ID, nama, satuan..." ariaLabel="Cari barang"
+              className="flex-1 max-w-xs"
+            />
             <div className="flex items-center gap-2 shrink-0">
-              <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg">Baris <b>merah</b> = stok di bawah minimum</span>
-              <Button variant="secondary"><Filter className="w-4 h-4" /> Filter</Button>
+              <fieldset className="flex bg-slate-100 p-0.5 rounded-lg">
+                <legend className="sr-only">Filter stok</legend>
+                {([
+                  { v: 'all', label: 'Semua' },
+                  { v: 'low', label: 'Stok menipis' },
+                  { v: 'out', label: 'Habis' },
+                ] as const).map(opt => (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => setStockFilter(opt.v)}
+                    aria-pressed={stockFilter === opt.v}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 ${
+                      stockFilter === opt.v
+                        ? 'bg-white text-indigo-700 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </fieldset>
               <Button variant="secondary" onClick={handleExport}><Download className="w-4 h-4" /> Export CSV</Button>
             </div>
           </div>
@@ -119,7 +140,7 @@ export default function Inventory() {
           {/* Table */}
           <div className="flex-1 overflow-auto">
             <table className="w-full text-sm border-collapse min-w-[900px]">
-              <thead className="bg-slate-50 sticky top-0 z-10">
+              <thead className="bg-slate-50 sticky top-0" style={{ zIndex: 'var(--z-sticky)' }}>
                 <tr className="border-b border-slate-200">
                   <DataHeader label="ID Barang" field="id" w="w-28" {...thProps} />
                   <DataHeader label="Nama Barang" field="nama" {...thProps} />
@@ -134,13 +155,28 @@ export default function Inventory() {
               <tbody ref={tableBodyRef}>
                 {filtered.length === 0 && (
                   <EmptyRow colSpan={8} message={
-                    search ? 'Tidak ada item yang cocok dengan pencarian.' : (
-                      <div className="flex flex-col items-center gap-3">
-                        <p className="text-sm">Belum ada data inventaris.</p>
-                        <Button variant="primary" size="md" onClick={handleAdd}>
-                          <Plus className="w-4 h-4" /> Tambah Barang Pertama
-                        </Button>
-                      </div>
+                    search || stockFilter !== 'all' ? (
+                      <EmptyState
+                        icon={stockFilter === 'low' || stockFilter === 'out' ? AlertTriangle : Package}
+                        title="Tidak ada item yang cocok"
+                        description={search ? `Tidak ditemukan untuk "${search}".` : (stockFilter === 'low' ? 'Semua item di atas batas minimum.' : 'Tidak ada barang yang habis.')}
+                        action={
+                          <Button variant="secondary" size="md" onClick={() => { setSearch(''); setStockFilter('all'); }}>
+                            Reset filter
+                          </Button>
+                        }
+                      />
+                    ) : (
+                      <EmptyState
+                        icon={Package}
+                        title="Belum ada data inventaris"
+                        description="Tambahkan suku cadang pertama untuk mulai mencatat stok."
+                        action={
+                          <Button variant="primary" size="md" onClick={handleAdd}>
+                            <Plus className="w-4 h-4" /> Tambah Barang Pertama
+                          </Button>
+                        }
+                      />
                     )
                   } />
                 )}

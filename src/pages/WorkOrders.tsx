@@ -1,24 +1,22 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { AgGridReact } from 'ag-grid-react';
-import { Plus, Trash2, Search, Download, Filter, FileSpreadsheet } from 'lucide-react';
+import { Plus, Trash2, Download, FileSpreadsheet, Wrench, FileText, Printer, Truck } from 'lucide-react';
 import { useStore, computeStatusBayar, type WorkOrder, type BomItem, type ServiceItem, type StatusBayar } from '../store/useStore';
 import type { ColDef, CellValueChangedEvent, ValueFormatterParams, ICellRendererParams } from 'ag-grid-community';
 import { exportWorkOrders } from '../lib/exportExcel';
 import { toast } from '../lib/toast';
 import { confirm } from '../lib/confirm';
-import { StatusPill } from './Dashboard';
-import { Button, Badge, Dialog, DataHeader, DataCell, EmptyRow, type SortDir } from '../components/ui';
+import { Button, Badge, Dialog, DataHeader, DataCell, EmptyRow, EmptyState, StatCard, SearchInput, StatusPill, WO_STATUS, isFinished, ActionMenu, type SortDir, type WOStatus } from '../components/ui';
+import { fmt } from '../lib/format';
 
-const STATUS_OPTIONS = ['Queue', 'Inspecting', 'Repairing', 'Testing', 'Finished', 'Picked Up'];
-const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(n);
+type StatusFilter = 'all' | 'active' | 'overdue' | WOStatus;
+
 
 function StatusBayarBadge({ status, sisa }: { status: StatusBayar; sisa: number }) {
   const tone = status === 'Belum Bayar' ? 'red' : status === 'DP' ? 'amber' : 'emerald';
-  const label = status === 'DP' && sisa > 0
-    ? `DP · sisa ${new Intl.NumberFormat('id-ID').format(sisa)}`
-    : status;
+  const label = status === 'DP' && sisa > 0 ? `DP · sisa ${fmt(sisa)}` : status;
   return (
-    <Badge tone={tone} bordered title={status === 'DP' ? `Sisa tagihan Rp ${new Intl.NumberFormat('id-ID').format(sisa)}` : status}>
+    <Badge tone={tone} bordered title={status === 'DP' ? `Sisa tagihan Rp ${fmt(sisa)}` : status}>
       {label}
     </Badge>
   );
@@ -30,7 +28,7 @@ function StatusCell({ value, onSave }: { value: string; onSave: (v: string) => v
     <select title="Pilih status" aria-label="Pilih status"
       autoFocus className="text-xs border border-indigo-400 rounded px-1 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 bg-white"
       value={value} onChange={e => { onSave(e.target.value); setEditing(false); }} onBlur={() => setEditing(false)}>
-      {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+      {WO_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
     </select>
   ) : (
     <span role="button" tabIndex={0} aria-label="Edit status. Tekan Enter untuk mengubah."
@@ -69,8 +67,6 @@ function BomRow({ bom, inventory, onUpdate, onRemove }: {
     commit(updated);
   };
 
-  const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(n);
-
   return (
     <tr className="border-b border-slate-100 hover:bg-slate-50">
       {/* Nama Barang */}
@@ -89,7 +85,7 @@ function BomRow({ bom, inventory, onUpdate, onRemove }: {
           placeholder="Ketik nama barang..."
         />
         {showDrop && filtered.length > 0 && (
-          <div ref={dropRef} className="absolute left-2 top-full mt-0.5 bg-white border border-indigo-300 rounded-lg shadow-xl z-[999] overflow-y-auto max-h-[180px] min-w-[280px]">
+          <div ref={dropRef} className="absolute left-2 top-full mt-0.5 bg-white border border-indigo-300 rounded-lg shadow-xl overflow-y-auto max-h-[180px] min-w-[280px]" style={{ zIndex: 'var(--z-dropdown)' }}>
             {filtered.map(inv => (
               <div
                 key={inv.id}
@@ -154,10 +150,13 @@ export default function WorkOrders() {
 
   const [selectedWO, setSelectedWO] = useState<WorkOrder | null>(null);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const tableBodyRef = useRef<HTMLTableSectionElement>(null);
   const newRowIdRef = useRef<string | null>(null);
+
+  const today = new Date().toISOString().split('T')[0];
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -165,6 +164,9 @@ export default function WorkOrders() {
       wo.id.toLowerCase().includes(q) || wo.customer.toLowerCase().includes(q) ||
       wo.merk.toLowerCase().includes(q) || wo.status.toLowerCase().includes(q) || wo.technician.toLowerCase().includes(q)
     );
+    if (statusFilter === 'active') rows = rows.filter(wo => !isFinished(wo.status));
+    else if (statusFilter === 'overdue') rows = rows.filter(wo => !isFinished(wo.status) && wo.estimasiSelesai !== '-' && wo.estimasiSelesai < today);
+    else if (statusFilter !== 'all') rows = rows.filter(wo => wo.status === statusFilter);
     if (sortField) {
       rows = [...rows].sort((a, b) => {
         const av = String((a as unknown as Record<string, unknown>)[sortField] ?? '');
@@ -173,7 +175,7 @@ export default function WorkOrders() {
       });
     }
     return rows;
-  }, [workOrders, search, sortField, sortDir]);
+  }, [workOrders, search, statusFilter, sortField, sortDir, today]);
 
   const handleSort = (field: string) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -242,16 +244,15 @@ export default function WorkOrders() {
     setSelectedWO(null);
   };
 
-  const today = new Date().toISOString().split('T')[0];
   const totalSpk = workOrders.length;
-  const totalSelesai = workOrders.filter(w => w.status === 'Finished' || w.status === 'Picked Up').length;
-  const overdueCount = workOrders.filter(w => w.status !== 'Finished' && w.status !== 'Picked Up' && w.estimasiSelesai !== '-' && w.estimasiSelesai < today).length;
+  const totalSelesai = workOrders.filter(w => isFinished(w.status)).length;
+  const overdueCount = workOrders.filter(w => !isFinished(w.status) && w.estimasiSelesai !== '-' && w.estimasiSelesai < today).length;
 
   const thProps = { sortField, sortDir, onSort: handleSort };
 
   return (
     <div className="flex-1 flex flex-col bg-slate-50 overflow-hidden">
-      <header className="bg-white border-b border-slate-200 h-12 flex items-center px-6 justify-between shrink-0">
+      <header className="bg-white border-b border-slate-200 h-12 flex items-center pl-14 pr-4 lg:px-6 justify-between shrink-0">
         <h2 className="text-base font-semibold text-slate-800">Manajemen Pekerjaan (Work Orders)</h2>
         <div className="flex items-center gap-2">
           <Button variant="success" onClick={() => { exportWorkOrders(workOrders, finance); toast.success('Data Work Orders berhasil di-export!'); }}>
@@ -265,37 +266,46 @@ export default function WorkOrders() {
 
       <main className="flex-1 p-4 overflow-hidden flex flex-col gap-3">
         {/* Summary Cards */}
-        <div className="grid grid-cols-3 gap-3 shrink-0">
-          <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm flex items-center justify-between">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Total SPK</p>
-            <h3 className="text-lg font-bold text-slate-800">{totalSpk} <span className="text-xs font-normal text-slate-500">Pekerjaan</span></h3>
-          </div>
-          <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm flex items-center justify-between">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">SPK Selesai</p>
-            <h3 className="text-lg font-bold text-emerald-600">{totalSelesai} <span className="text-xs font-normal text-slate-500">Pekerjaan</span></h3>
-          </div>
-          <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm border-l-4 border-l-red-400 flex items-center justify-between">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">SPK Jatuh Tempo</p>
-            <h3 className={`text-lg font-bold ${overdueCount > 0 ? 'text-red-600' : 'text-slate-800'}`}>{overdueCount} <span className="text-xs font-normal text-slate-500">Pekerjaan</span></h3>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
+          <StatCard label="Total SPK" value={totalSpk} hint="Semua pekerjaan" />
+          <StatCard label="SPK Selesai" value={totalSelesai} hint="Finished + Picked Up" accent="emerald" />
+          <StatCard
+            label="SPK Jatuh Tempo" value={overdueCount}
+            hint={overdueCount > 0 ? 'Klik untuk filter' : 'Semua tepat waktu'}
+            accent={overdueCount > 0 ? 'red' : 'slate'}
+            onClick={overdueCount > 0 ? () => setStatusFilter('overdue') : undefined}
+          />
         </div>
 
         <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0 gap-3">
-            <div className="relative flex-1 max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input type="text" placeholder="Cari work order..." aria-label="Cari work order" value={search} onChange={e => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 bg-slate-50 placeholder:text-slate-400" />
-            </div>
-            <div className="flex gap-2 shrink-0">
-              <Button variant="secondary"><Filter className="w-4 h-4" /> Filter</Button>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0 gap-3 flex-wrap">
+            <SearchInput
+              value={search} onChange={setSearch}
+              placeholder="Cari ID, pelanggan, merk, teknisi..." ariaLabel="Cari work order"
+              className="flex-1 max-w-xs"
+            />
+            <div className="flex gap-2 shrink-0 items-center">
+              <label htmlFor="wo-status-filter" className="sr-only">Filter status</label>
+              <select
+                id="wo-status-filter"
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value as StatusFilter)}
+                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 cursor-pointer"
+              >
+                <option value="all">Semua Status</option>
+                <option value="active">Hanya Aktif</option>
+                <option value="overdue">Jatuh Tempo</option>
+                <optgroup label="Per Status">
+                  {WO_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
+                </optgroup>
+              </select>
               <Button variant="secondary" onClick={handleExport}><Download className="w-4 h-4" /> Export CSV</Button>
             </div>
           </div>
 
           <div className="flex-1 overflow-auto">
             <table className="w-full text-sm border-collapse min-w-[1100px]">
-              <thead className="bg-slate-50 sticky top-0 z-10">
+              <thead className="bg-slate-50 sticky top-0" style={{ zIndex: 'var(--z-sticky)' }}>
                 <tr className="border-b border-slate-200">
                   <DataHeader label="ID" field="id" w="w-32" {...thProps} />
                   <DataHeader label="Pelanggan" field="customer" {...thProps} />
@@ -313,13 +323,28 @@ export default function WorkOrders() {
               <tbody ref={tableBodyRef}>
                 {filtered.length === 0 && (
                   <EmptyRow colSpan={11} message={
-                    search ? 'Tidak ada data yang cocok dengan pencarian.' : (
-                      <div className="flex flex-col items-center gap-3">
-                        <p className="text-sm">Belum ada Work Order.</p>
-                        <Button variant="primary" size="md" onClick={handleAddWO}>
-                          <Plus className="w-4 h-4" /> Buat SPK Pertama
-                        </Button>
-                      </div>
+                    search || statusFilter !== 'all' ? (
+                      <EmptyState
+                        icon={Wrench}
+                        title="Tidak ada SPK yang cocok"
+                        description={search ? `Tidak ditemukan untuk "${search}".` : 'Coba ubah filter status.'}
+                        action={
+                          <Button variant="secondary" size="md" onClick={() => { setSearch(''); setStatusFilter('all'); }}>
+                            Reset filter
+                          </Button>
+                        }
+                      />
+                    ) : (
+                      <EmptyState
+                        icon={Wrench}
+                        title="Belum ada Work Order"
+                        description="Buat SPK pertama untuk mulai mengelola pekerjaan."
+                        action={
+                          <Button variant="primary" size="md" onClick={handleAddWO}>
+                            <Plus className="w-4 h-4" /> Buat SPK Pertama
+                          </Button>
+                        }
+                      />
                     )
                   } />
                 )}
@@ -355,32 +380,23 @@ export default function WorkOrders() {
                         : <span className="text-2xs italic text-slate-300">— belum ada biaya —</span>}
                     </td>
                     <td className="px-4 py-3">
-                      <select
-                        title="Pilih Aksi" aria-label="Pilih Aksi"
-                        className="text-xs font-medium bg-white border border-slate-200 text-slate-700 rounded-md px-2 py-1.5 w-36 cursor-pointer hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 shadow-sm"
-                        value=""
-                        onChange={e => {
-                          const val = e.target.value;
-                          e.target.value = '';
-                          if (val === 'spk') window.open(`/print/spk/${wo.id}`, '_blank');
-                          else if (val === 'invoice') window.open(`/print/invoice/${wo.id}`, '_blank');
-                          else if (val === 'sj') window.open(`/print/surat-jalan/${wo.id}`, '_blank');
-                          else if (val === 'delete') {
-                            confirm({
+                      <ActionMenu
+                        ariaLabel={`Aksi untuk ${wo.id}`}
+                        actions={[
+                          { label: 'Cetak SPK', icon: FileText, onClick: () => window.open(`/print/spk/${wo.id}`, '_blank') },
+                          { label: 'Cetak Invoice', icon: Printer, onClick: () => window.open(`/print/invoice/${wo.id}`, '_blank') },
+                          { label: 'Cetak Surat Jalan', icon: Truck, onClick: () => window.open(`/print/surat-jalan/${wo.id}`, '_blank') },
+                          { label: 'Hapus WO', icon: Trash2, destructive: true, separator: true, onClick: async () => {
+                            const ok = await confirm({
                               title: 'Hapus Work Order?',
                               message: <>Pekerjaan <b>{wo.id}</b> ({wo.customer} — {wo.merk}) akan dihapus permanen, beserta semua data BOM, jasa, dan transaksi terkait. Tindakan ini <b>tidak bisa diurungkan</b>.</>,
                               destructive: true,
                               confirmLabel: 'Hapus WO',
-                            }).then(ok => { if (ok) deleteWorkOrder(wo.id); });
-                          }
-                        }}
-                      >
-                        <option value="" disabled hidden>Aksi...</option>
-                        <option value="spk">📝 Cetak SPK</option>
-                        <option value="invoice">🖨️ Cetak Invoice</option>
-                        <option value="sj">📄 Cetak Surat Jalan</option>
-                        <option value="delete">🗑️ Hapus WO</option>
-                      </select>
+                            });
+                            if (ok) deleteWorkOrder(wo.id);
+                          } },
+                        ]}
+                      />
                     </td>
                   </tr>
                   );
@@ -459,15 +475,16 @@ export default function WorkOrders() {
               <div className="bg-white border border-amber-200 rounded-lg shadow-sm p-4">
                 <div className="mb-3">
                   <h4 className="font-semibold text-slate-700">Diskon</h4>
-                  <p className="text-xs text-slate-400 mt-0.5">Masukkan diskon nominal (Rp) atau persentase (%) — keduanya saling terhubung otomatis.</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Edit nominal (Rp) <b>atau</b> persentase (%) — yang lain ikut otomatis.</p>
                 </div>
-                <div className="flex items-end gap-3">
+                <div className="flex items-end gap-2">
                   {/* Input Nominal Rp */}
                   <div className="flex-1">
-                    <label className="text-xs text-slate-500 font-medium block mb-1">Nominal (Rp)</label>
+                    <label htmlFor="diskon-nominal" className="text-xs text-slate-500 font-medium block mb-1">Nominal (Rp)</label>
                     <div className="flex items-center border border-slate-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-amber-400">
                       <span className="px-2.5 py-1.5 bg-slate-50 text-xs text-slate-500 border-r border-slate-300 font-medium">Rp</span>
                       <input
+                        id="diskon-nominal"
                         type="number"
                         min="0"
                         value={selectedWO.diskon ?? 0}
@@ -476,12 +493,13 @@ export default function WorkOrders() {
                       />
                     </div>
                   </div>
-                  <div className="text-slate-400 text-xs font-medium pb-2">atau</div>
+                  <div className="text-amber-500 text-base font-bold pb-2 select-none" aria-hidden="true">⇄</div>
                   {/* Input Persentase */}
                   <div className="w-28">
-                    <label className="text-xs text-slate-500 font-medium block mb-1">Persentase (%)</label>
+                    <label htmlFor="diskon-pct" className="text-xs text-slate-500 font-medium block mb-1">Persentase (%)</label>
                     <div className="flex items-center border border-slate-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-amber-400">
                       <input
+                        id="diskon-pct"
                         type="number"
                         min="0"
                         max="100"

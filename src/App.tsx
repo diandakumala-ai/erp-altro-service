@@ -30,9 +30,10 @@ const navLinks = [
 ];
 
 const Sidebar = ({
-  collapsed, onToggle, user, onLogout
+  collapsed, onToggle, mobileOpen, onMobileClose, user, onLogout
 }: {
   collapsed: boolean; onToggle: () => void;
+  mobileOpen: boolean; onMobileClose: () => void;
   user: { email: string } | null;
   onLogout: () => void;
 }) => {
@@ -40,8 +41,27 @@ const Sidebar = ({
   const initials = user?.email?.slice(0, 1).toUpperCase() ?? 'A';
   const emailDisplay = user?.email ?? 'admin@altro.com';
 
+  // Tutup drawer mobile saat navigasi
+  useEffect(() => { onMobileClose(); }, [location.pathname, onMobileClose]);
+
   return (
-    <div className={`bg-slate-900 text-slate-300 h-screen flex flex-col shrink-0 transition-all duration-300 ease-in-out ${collapsed ? 'w-16' : 'w-64'}`}>
+    <>
+      {/* Backdrop untuk drawer mobile */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm lg:hidden"
+          style={{ zIndex: 'var(--z-modal-backdrop)' }}
+          onClick={onMobileClose}
+          aria-hidden="true"
+        />
+      )}
+      <div
+        className={`bg-slate-900 text-slate-300 h-screen flex flex-col shrink-0 transition-all duration-300 ease-in-out
+          ${collapsed ? 'lg:w-16' : 'lg:w-64'}
+          fixed inset-y-0 left-0 w-64 lg:relative lg:translate-x-0
+          ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+        style={{ zIndex: 'var(--z-modal)' }}
+      >
       {collapsed ? (
         <div className="h-12 border-b border-slate-800 flex items-center justify-center">
           <button onClick={onToggle} title="Perluas sidebar" aria-label="Perluas sidebar"
@@ -65,16 +85,20 @@ const Sidebar = ({
         </div>
       )}
 
-      <nav className="flex-1 py-3 overflow-y-auto overflow-x-hidden">
-        {!collapsed && <p className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Menu</p>}
-        <ul className="space-y-0.5 px-2">
+      <nav aria-label="Menu utama" className="flex-1 py-3 overflow-y-auto overflow-x-hidden">
+        {!collapsed && <p id="sidebar-menu-heading" className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Menu</p>}
+        <ul aria-labelledby={collapsed ? undefined : 'sidebar-menu-heading'} className="space-y-0.5 px-2">
           {navLinks.map(({ to, label, icon: Icon }) => {
             const isActive = location.pathname === to || (to === '/dashboard' && location.pathname === '/') || location.pathname.startsWith(to + '/');
             return (
               <li key={to}>
-                <Link to={to} title={collapsed ? label : undefined}
-                  className={`flex items-center gap-3 px-2.5 py-2.5 rounded-md text-sm font-medium transition-all ${isActive ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
-                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                <Link
+                  to={to}
+                  title={collapsed ? label : undefined}
+                  aria-current={isActive ? 'page' : undefined}
+                  aria-label={collapsed ? label : undefined}
+                  className={`flex items-center gap-3 px-2.5 py-2.5 rounded-md text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 ${isActive ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!collapsed && <span className="truncate">{label}</span>}
                 </Link>
               </li>
@@ -108,12 +132,21 @@ const Sidebar = ({
         )}
       </div>
     </div>
+    </>
   );
 };
 
 
+const SIDEBAR_KEY = 'altro-sidebar-collapsed';
+
 function AppShell({ session }: { session: Session }) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem(SIDEBAR_KEY) === '1'; } catch { return false; }
+  });
+  const [mobileOpen, setMobileOpen] = useState(false);
+  useEffect(() => {
+    try { localStorage.setItem(SIDEBAR_KEY, sidebarCollapsed ? '1' : '0'); } catch { /* ignore */ }
+  }, [sidebarCollapsed]);
   const [appLoading, setAppLoading] = useState(true);
   const [loadStatus, setLoadStatus] = useState('Menghubungkan ke database...');
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -211,10 +244,22 @@ function AppShell({ session }: { session: Session }) {
       <Sidebar
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(v => !v)}
+        mobileOpen={mobileOpen}
+        onMobileClose={() => setMobileOpen(false)}
         user={{ email: session.user?.email ?? '' }}
         onLogout={handleLogout}
       />
       <div className="flex-1 overflow-hidden flex flex-col">
+        {/* Mobile menu button — visible saat layar < lg */}
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          aria-label="Buka menu"
+          className="lg:hidden fixed top-2 left-2 w-10 h-10 flex items-center justify-center rounded-md bg-slate-900 text-white shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
+          style={{ zIndex: 'var(--z-sticky)' }}
+        >
+          <Menu className="w-5 h-5" aria-hidden="true" />
+        </button>
         <div className="flex-1 overflow-hidden flex">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />

@@ -1,8 +1,10 @@
 import { useState, useMemo, useRef } from 'react';
-import { Plus, Trash2, Search, Download, Filter, FileSpreadsheet } from 'lucide-react';
+import { Plus, Trash2, Download, Users, FileSpreadsheet } from 'lucide-react';
 import { useStore, type Customer } from '../store/useStore';
-import { Button, DataHeader, DataCell, EmptyRow, type SortDir } from '../components/ui';
+import { Button, DataHeader, DataCell, EmptyRow, EmptyState, StatCard, SearchInput, type SortDir } from '../components/ui';
 import { confirm } from '../lib/confirm';
+
+type FilterMode = 'all' | 'active' | 'inactive';
 
 export default function Customers() {
   const customers = useStore(s => s.customers);
@@ -11,6 +13,7 @@ export default function Customers() {
   const deleteCustomer = useStore(s => s.deleteCustomer);
 
   const [search, setSearch] = useState('');
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const tableBodyRef = useRef<HTMLTableSectionElement>(null);
@@ -21,6 +24,8 @@ export default function Customers() {
       c.id.toLowerCase().includes(q) || c.nama.toLowerCase().includes(q) ||
       c.perusahaan.toLowerCase().includes(q) || c.telepon.includes(q) || c.alamat.toLowerCase().includes(q)
     );
+    if (filterMode === 'active') rows = rows.filter(c => c.totalWo > 0);
+    else if (filterMode === 'inactive') rows = rows.filter(c => c.totalWo === 0);
     if (sortField) {
       rows = [...rows].sort((a, b) => {
         const av = String((a as unknown as Record<string, unknown>)[sortField] ?? '');
@@ -29,7 +34,7 @@ export default function Customers() {
       });
     }
     return rows;
-  }, [customers, search, sortField, sortDir]);
+  }, [customers, search, filterMode, sortField, sortDir]);
 
   const handleSort = (field: string) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -64,7 +69,7 @@ export default function Customers() {
 
   return (
     <div className="flex-1 flex flex-col bg-slate-50 overflow-hidden">
-      <header className="bg-white border-b border-slate-200 h-12 flex items-center px-6 justify-between shrink-0">
+      <header className="bg-white border-b border-slate-200 h-12 flex items-center pl-14 pr-4 lg:px-6 justify-between shrink-0">
         <h2 className="text-base font-semibold text-slate-800">Data Pelanggan (Customers)</h2>
         <div className="flex items-center gap-2">
           <Button variant="success" onClick={handleExport}>
@@ -77,37 +82,50 @@ export default function Customers() {
       </header>
 
       <main className="flex-1 p-4 overflow-hidden flex flex-col gap-3">
-        <div className="grid grid-cols-3 gap-3 shrink-0">
-          <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm flex items-center justify-between">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Total Pelanggan</p>
-            <h3 className="text-lg font-bold text-slate-800">{totalPelanggan} <span className="text-xs font-normal text-slate-500">Orang/PT</span></h3>
-          </div>
-          <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm border-l-4 border-l-emerald-500 flex items-center justify-between">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Pelanggan Aktif</p>
-            <h3 className="text-lg font-bold text-emerald-600">{pelangganAktif} <span className="text-xs font-normal text-slate-500">Bertransaksi</span></h3>
-          </div>
-          <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm border-l-4 border-l-indigo-500 flex items-center justify-between">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Total SPK Dipesan</p>
-            <h3 className="text-lg font-bold text-indigo-600">{totalSpk} <span className="text-xs font-normal text-slate-500">Pekerjaan</span></h3>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
+          <StatCard label="Total Pelanggan" value={totalPelanggan} hint="Orang/PT terdaftar" />
+          <StatCard label="Pelanggan Aktif" value={pelangganAktif} hint="Pernah bertransaksi" accent="emerald" />
+          <StatCard label="Total SPK Dipesan" value={totalSpk} hint="Akumulasi pekerjaan" accent="indigo" />
         </div>
 
         <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0 gap-3">
-            <div className="relative flex-1 max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input type="text" placeholder="Cari pelanggan..." aria-label="Cari pelanggan" value={search} onChange={e => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 bg-slate-50 placeholder:text-slate-400" />
-            </div>
-            <div className="flex gap-2 shrink-0">
-              <Button variant="secondary"><Filter className="w-4 h-4" /> Filter</Button>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0 gap-3 flex-wrap">
+            <SearchInput
+              value={search} onChange={setSearch}
+              placeholder="Cari ID, nama, perusahaan, telepon..."
+              ariaLabel="Cari pelanggan"
+              className="flex-1 max-w-xs"
+            />
+            <div className="flex gap-2 shrink-0 items-center">
+              <fieldset className="flex bg-slate-100 p-0.5 rounded-lg">
+                <legend className="sr-only">Filter aktivitas pelanggan</legend>
+                {([
+                  { v: 'all', label: 'Semua' },
+                  { v: 'active', label: 'Aktif' },
+                  { v: 'inactive', label: 'Belum aktif' },
+                ] as const).map(opt => (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => setFilterMode(opt.v)}
+                    aria-pressed={filterMode === opt.v}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 ${
+                      filterMode === opt.v
+                        ? 'bg-white text-indigo-700 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </fieldset>
               <Button variant="secondary" onClick={handleExport}><Download className="w-4 h-4" /> Export CSV</Button>
             </div>
           </div>
 
           <div className="flex-1 overflow-auto">
             <table className="w-full text-sm border-collapse min-w-[800px]">
-              <thead className="bg-slate-50 sticky top-0 z-10">
+              <thead className="bg-slate-50 sticky top-0" style={{ zIndex: 'var(--z-sticky)' }}>
                 <tr className="border-b border-slate-200">
                   <DataHeader label="ID" field="id" w="w-24" {...thProps} />
                   <DataHeader label="Nama Pelanggan" field="nama" {...thProps} />
@@ -121,13 +139,28 @@ export default function Customers() {
               <tbody ref={tableBodyRef}>
                 {filtered.length === 0 && (
                   <EmptyRow colSpan={7} message={
-                    search ? 'Tidak ada pelanggan yang cocok dengan pencarian.' : (
-                      <div className="flex flex-col items-center gap-3">
-                        <p className="text-sm">Belum ada data pelanggan.</p>
-                        <Button variant="primary" size="md" onClick={handleAdd}>
-                          <Plus className="w-4 h-4" /> Tambah Pelanggan Pertama
-                        </Button>
-                      </div>
+                    search || filterMode !== 'all' ? (
+                      <EmptyState
+                        icon={Users}
+                        title="Tidak ada pelanggan yang cocok"
+                        description={search ? `Tidak ditemukan untuk pencarian "${search}".` : 'Coba ubah filter aktivitas.'}
+                        action={
+                          <Button variant="secondary" size="md" onClick={() => { setSearch(''); setFilterMode('all'); }}>
+                            Reset filter
+                          </Button>
+                        }
+                      />
+                    ) : (
+                      <EmptyState
+                        icon={Users}
+                        title="Belum ada pelanggan terdaftar"
+                        description="Tambahkan pelanggan pertama untuk mulai mencatat Work Order."
+                        action={
+                          <Button variant="primary" size="md" onClick={handleAdd}>
+                            <Plus className="w-4 h-4" /> Tambah Pelanggan Pertama
+                          </Button>
+                        }
+                      />
                     )
                   } />
                 )}
