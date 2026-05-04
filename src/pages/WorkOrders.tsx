@@ -386,16 +386,30 @@ export default function WorkOrders() {
                     <td className="px-4 py-3 text-slate-600 text-xs"><DataCell value={wo.estimasiSelesai} onSave={v => update(wo, 'estimasiSelesai', v)} type="date" ariaLabel="Edit estimasi selesai" /></td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <button
-                        title="Klik untuk edit Jasa & Material"
+                        title="Klik untuk edit Jasa, Material & Termin"
                         onClick={() => setSelectedWO(wo)}
-                        className="group flex items-center gap-2 text-left w-full hover:text-indigo-600 transition-colors"
+                        className="group flex flex-col gap-0.5 text-left w-full hover:text-indigo-600 transition-colors"
                       >
-                        <span className={`font-medium ${wo.estimatedCost ? 'text-slate-700' : 'text-slate-300'}`}>
-                          {wo.estimatedCost ? `Rp ${fmt(wo.estimatedCost)}` : '—'}
+                        <span className="flex items-center gap-2">
+                          <span className={`font-medium ${wo.estimatedCost ? 'text-slate-700' : 'text-slate-300'}`}>
+                            {wo.estimatedCost ? `Rp ${fmt(wo.estimatedCost)}` : '—'}
+                          </span>
+                          <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto">
+                            <svg className="w-3.5 h-3.5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                          </span>
                         </span>
-                        <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto">
-                          <svg className="w-3.5 h-3.5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                        </span>
+                        {wo.estimatedCost > 0 && (
+                          <span
+                            className={`text-3xs font-bold uppercase tracking-wider px-1.5 py-0.5 rounded self-start ${
+                              (wo.terminHari ?? 0) === 0
+                                ? 'bg-slate-100 text-slate-500'
+                                : 'bg-indigo-50 text-indigo-600'
+                            }`}
+                            title={(wo.terminHari ?? 0) === 0 ? 'Lunas di Tempat' : `Termin ${wo.terminHari} hari`}
+                          >
+                            {(wo.terminHari ?? 0) === 0 ? 'COD' : `NET ${wo.terminHari}`}
+                          </span>
+                        )}
                       </button>
                     </td>
                     <td className="px-4 py-3">

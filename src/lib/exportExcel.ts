@@ -166,25 +166,47 @@ export function exportPiutang(
     .filter(wo => wo.estimatedCost > 0)
     .map(wo => ({ wo, info: computeStatusBayar(wo, finance) }))
     .filter(({ info }) => info.status !== 'Lunas')
-    .sort((a, b) => b.info.sisaTagihan - a.info.sisaTagihan);
+    // Sort: yang lewat tempo paling atas, dalam group sort by sisa terbanyak
+    .sort((a, b) => {
+      if (a.info.isOverdue !== b.info.isOverdue) return a.info.isOverdue ? -1 : 1;
+      if (a.info.isDueSoon !== b.info.isDueSoon) return a.info.isDueSoon ? -1 : 1;
+      return b.info.sisaTagihan - a.info.sisaTagihan;
+    });
 
-  const rows = piutangList.map(({ wo, info }) => ({
-    'No. WO': wo.id,
-    'Pelanggan': wo.customer,
-    'Item/Merk': wo.merk,
-    'Tgl Masuk': wo.dateIn,
-    'Status WO': wo.status,
-    'Total Tagihan (Rp)': wo.estimatedCost,
-    'Sudah Dibayar (Rp)': info.totalBayar,
-    'Sisa Tagihan (Rp)': info.sisaTagihan,
-    'Status Bayar': info.status,
-  }));
+  const rows = piutangList.map(({ wo, info }) => {
+    const terminLabel = (wo.terminHari ?? 0) === 0 ? 'COD' : `NET ${wo.terminHari}`;
+    const aging =
+      info.isOverdue && info.hariKeJatuhTempo != null
+        ? `Lewat ${Math.abs(info.hariKeJatuhTempo)} hari`
+        : info.isDueSoon && info.hariKeJatuhTempo != null
+        ? (info.hariKeJatuhTempo === 0 ? 'Hari ini' : `${info.hariKeJatuhTempo} hari lagi`)
+        : info.hariKeJatuhTempo != null
+        ? `${info.hariKeJatuhTempo} hari lagi`
+        : '-';
+    return {
+      'No. WO': wo.id,
+      'Pelanggan': wo.customer,
+      'Item/Merk': wo.merk,
+      'Tgl Masuk': wo.dateIn,
+      'Status WO': wo.status,
+      'Termin': terminLabel,
+      'Tgl Invoice': wo.tanggalInvoice ?? '-',
+      'Jatuh Tempo': info.jatuhTempo ?? '-',
+      'Aging': aging,
+      'Total Tagihan (Rp)': Math.max((wo.estimatedCost || 0) - (wo.diskon || 0), 0),
+      'Sudah Dibayar (Rp)': info.totalBayar,
+      'Sisa Tagihan (Rp)': info.sisaTagihan,
+      'Status Bayar': info.status,
+      'Lewat Tempo?': info.isOverdue ? 'YA' : '',
+    };
+  });
 
   const ws = XLSX.utils.json_to_sheet(rows);
-  const headers = ['No. WO', 'Pelanggan', 'Item/Merk', 'Tgl Masuk', 'Status WO', 'Total Tagihan (Rp)', 'Sudah Dibayar (Rp)', 'Sisa Tagihan (Rp)', 'Status Bayar'];
+  const headers = Object.keys(rows[0] || {});
   autoWidth(ws, rows as Record<string, unknown>[], headers);
 
-  ['F', 'G', 'H'].forEach(col => {
+  // Format numerik untuk kolom Rp (J, K, L sekarang)
+  ['J', 'K', 'L'].forEach(col => {
     for (let r = 1; r <= rows.length; r++) {
       const ref = `${col}${r + 1}`;
       if (ws[ref]) ws[ref].z = '#,##0';
@@ -205,7 +227,8 @@ export function exportWorkOrders(
   const sorted = [...workOrders].sort((a, b) => b.dateIn.localeCompare(a.dateIn));
 
   const rows = sorted.map(wo => {
-    const { status: statusBayar, sisaTagihan } = computeStatusBayar(wo, finance);
+    const info = computeStatusBayar(wo, finance);
+    const terminLabel = (wo.terminHari ?? 0) === 0 ? 'COD' : `NET ${wo.terminHari}`;
     return {
       'No. WO': wo.id,
       'Tgl Masuk': wo.dateIn,
@@ -217,8 +240,13 @@ export function exportWorkOrders(
       'Teknisi': wo.technician,
       'Est. Selesai': wo.estimasiSelesai,
       'Estimasi Biaya (Rp)': wo.estimatedCost,
-      'Status Bayar': statusBayar,
-      'Sisa Tagihan (Rp)': sisaTagihan,
+      'Diskon (Rp)': wo.diskon ?? 0,
+      'Termin': terminLabel,
+      'Tgl Invoice': wo.tanggalInvoice ?? '-',
+      'Jatuh Tempo': info.jatuhTempo ?? '-',
+      'Status Bayar': info.status,
+      'Sisa Tagihan (Rp)': info.sisaTagihan,
+      'Lewat Tempo?': info.isOverdue ? 'YA' : '',
     };
   });
 
@@ -226,7 +254,8 @@ export function exportWorkOrders(
   const headers = Object.keys(rows[0] || {});
   autoWidth(ws, rows as Record<string, unknown>[], headers);
 
-  ['J', 'L'].forEach(col => {
+  // Format numerik: J (Estimasi), K (Diskon), P (Sisa Tagihan)
+  ['J', 'K', 'P'].forEach(col => {
     for (let r = 1; r <= rows.length; r++) {
       const ref = `${col}${r + 1}`;
       if (ws[ref]) ws[ref].z = '#,##0';
@@ -329,11 +358,13 @@ export function exportLaporanLengkap(
   const pemasukan = trxPeriod.filter(t => t.nominal > 0).reduce((a, b) => a + b.nominal, 0);
   const pengeluaran = Math.abs(trxPeriod.filter(t => t.nominal < 0).reduce((a, b) => a + b.nominal, 0));
   const laba = pemasukan - pengeluaran;
-  const piutangTotal = workOrders
+  const piutangInfos = workOrders
     .filter(wo => wo.estimatedCost > 0)
     .map(wo => computeStatusBayar(wo, finance))
-    .filter(i => i.status !== 'Lunas')
-    .reduce((a, i) => a + i.sisaTagihan, 0);
+    .filter(i => i.status !== 'Lunas');
+  const piutangTotal = piutangInfos.reduce((a, i) => a + i.sisaTagihan, 0);
+  const piutangOverdueCount = piutangInfos.filter(i => i.isOverdue).length;
+  const piutangOverdueTotal = piutangInfos.filter(i => i.isOverdue).reduce((a, i) => a + i.sisaTagihan, 0);
 
   const periodeLabel = period ? monthLabel(period) : 'Semua Periode';
   const summaryData = [
@@ -346,6 +377,8 @@ export function exportLaporanLengkap(
     ['Total Pengeluaran', pengeluaran],
     ['Laba Bersih', laba],
     ['Piutang Belum Lunas', piutangTotal],
+    ['  ↳ WO Lewat Jatuh Tempo', piutangOverdueCount],
+    ['  ↳ Nilai Lewat Tempo', piutangOverdueTotal],
     [],
     ['RINGKASAN OPERASIONAL', ''],
     ['Total Work Order', workOrders.length],
@@ -392,24 +425,60 @@ export function exportLaporanLengkap(
     .filter(wo => wo.estimatedCost > 0)
     .map(wo => ({ wo, info: computeStatusBayar(wo, finance) }))
     .filter(({ info }) => info.status !== 'Lunas')
-    .map(({ wo, info }) => ({
-      'No. WO': wo.id, 'Pelanggan': wo.customer, 'Merk': wo.merk,
-      'Tgl Masuk': wo.dateIn, 'Total Tagihan': wo.estimatedCost,
-      'Sudah Bayar': info.totalBayar, 'Sisa Tagihan': info.sisaTagihan, 'Status': info.status,
-    }));
+    .sort((a, b) => {
+      if (a.info.isOverdue !== b.info.isOverdue) return a.info.isOverdue ? -1 : 1;
+      return b.info.sisaTagihan - a.info.sisaTagihan;
+    })
+    .map(({ wo, info }) => {
+      const terminLabel = (wo.terminHari ?? 0) === 0 ? 'COD' : `NET ${wo.terminHari}`;
+      const aging =
+        info.isOverdue && info.hariKeJatuhTempo != null
+          ? `Lewat ${Math.abs(info.hariKeJatuhTempo)} hari`
+          : info.hariKeJatuhTempo != null
+          ? `${info.hariKeJatuhTempo} hari lagi`
+          : '-';
+      return {
+        'No. WO': wo.id, 'Pelanggan': wo.customer, 'Merk': wo.merk,
+        'Tgl Masuk': wo.dateIn,
+        'Termin': terminLabel,
+        'Tgl Invoice': wo.tanggalInvoice ?? '-',
+        'Jatuh Tempo': info.jatuhTempo ?? '-',
+        'Aging': aging,
+        'Total Tagihan': Math.max((wo.estimatedCost || 0) - (wo.diskon || 0), 0),
+        'Sudah Bayar': info.totalBayar, 'Sisa Tagihan': info.sisaTagihan,
+        'Status': info.status,
+        'Lewat Tempo?': info.isOverdue ? 'YA' : '',
+      };
+    });
   const wsPiutang = XLSX.utils.json_to_sheet(piRows.length ? piRows : [{ 'Info': 'Tidak ada piutang' }]);
-  wsPiutang['!cols'] = [{ wch: 14 }, { wch: 28 }, { wch: 24 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 12 }];
+  wsPiutang['!cols'] = [
+    { wch: 14 }, { wch: 28 }, { wch: 24 }, { wch: 12 }, { wch: 10 },
+    { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 12 },
+  ];
   XLSX.utils.book_append_sheet(wb, wsPiutang, 'Piutang');
 
   // ── Sheet 5: Work Orders ──────────────────────
-  const woRows = [...workOrders].sort((a, b) => b.dateIn.localeCompare(a.dateIn)).map(wo => ({
-    'No. WO': wo.id, 'Tgl Masuk': wo.dateIn, 'Pelanggan': wo.customer,
-    'Merk': wo.merk, 'Kapasitas': wo.capacity, 'Keluhan': wo.keluhan,
-    'Status': wo.status, 'Teknisi': wo.technician, 'Est. Selesai': wo.estimasiSelesai,
-    'Est. Biaya (Rp)': wo.estimatedCost,
-  }));
+  const woRows = [...workOrders].sort((a, b) => b.dateIn.localeCompare(a.dateIn)).map(wo => {
+    const info = computeStatusBayar(wo, finance);
+    const terminLabel = (wo.terminHari ?? 0) === 0 ? 'COD' : `NET ${wo.terminHari}`;
+    return {
+      'No. WO': wo.id, 'Tgl Masuk': wo.dateIn, 'Pelanggan': wo.customer,
+      'Merk': wo.merk, 'Kapasitas': wo.capacity, 'Keluhan': wo.keluhan,
+      'Status': wo.status, 'Teknisi': wo.technician, 'Est. Selesai': wo.estimasiSelesai,
+      'Est. Biaya (Rp)': wo.estimatedCost,
+      'Termin': terminLabel,
+      'Tgl Invoice': wo.tanggalInvoice ?? '-',
+      'Jatuh Tempo': info.jatuhTempo ?? '-',
+      'Status Bayar': info.status,
+      'Lewat Tempo?': info.isOverdue ? 'YA' : '',
+    };
+  });
   const wsWo = XLSX.utils.json_to_sheet(woRows);
-  wsWo['!cols'] = [{ wch: 14 }, { wch: 12 }, { wch: 28 }, { wch: 24 }, { wch: 16 }, { wch: 30 }, { wch: 12 }, { wch: 16 }, { wch: 14 }, { wch: 16 }];
+  wsWo['!cols'] = [
+    { wch: 14 }, { wch: 12 }, { wch: 28 }, { wch: 24 }, { wch: 16 }, { wch: 30 },
+    { wch: 12 }, { wch: 16 }, { wch: 14 }, { wch: 16 },
+    { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
+  ];
   XLSX.utils.book_append_sheet(wb, wsWo, 'Work Orders');
 
   // ── Sheet 6: Inventori ────────────────────────

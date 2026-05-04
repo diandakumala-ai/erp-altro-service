@@ -271,6 +271,9 @@ export default function PrintTemplates() {
   if (type === 'invoice') {
     const diskon = wo.diskon ?? 0;
     const grandTotal = Math.max(subtotal - diskon, 0);
+    const piutang = computeStatusBayar(wo, finance);
+    const fmtTanggalLong = (iso?: string | null) =>
+      iso ? new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
 
     return (
       <div className="min-h-screen bg-slate-200 print:bg-white">
@@ -280,6 +283,26 @@ export default function PrintTemplates() {
             body { background: white !important; margin: 0; padding: 0; }
             @page { size: A5 landscape; margin: 0.8cm; }
             .no-print { display: none !important; }
+          }
+          /* Watermark OVERDUE — diagonal merah saat dicetak ulang piutang lewat tempo */
+          .overdue-watermark {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            z-index: 1;
+          }
+          .overdue-watermark span {
+            transform: rotate(-30deg);
+            font-size: 90px;
+            font-weight: 900;
+            color: rgba(220, 38, 38, 0.18);
+            border: 6px solid rgba(220, 38, 38, 0.18);
+            padding: 8px 36px;
+            letter-spacing: 0.1em;
+            white-space: nowrap;
           }
         `}</style>
 
@@ -299,10 +322,17 @@ export default function PrintTemplates() {
         </div>
 
         {/* Halaman A5 Landscape */}
-        <div className="bg-white text-black px-7 py-5 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none text-xs">
+        <div className="relative bg-white text-black px-7 py-5 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none text-xs">
+
+          {/* Watermark OVERDUE — hanya muncul kalau piutang lewat tempo */}
+          {piutang.isOverdue && (
+            <div className="overdue-watermark" aria-hidden="true">
+              <span>OVERDUE</span>
+            </div>
+          )}
 
           {/* Header */}
-          <div className="flex justify-between items-start mb-4">
+          <div className="flex justify-between items-start mb-4 relative" style={{ zIndex: 2 }}>
             <div className="flex items-start gap-3">
               <img
                 src={bs.logoUrl || '/primary-logo.png'}
@@ -328,11 +358,33 @@ export default function PrintTemplates() {
               <p className="mt-1">Kepada Yth,</p>
               <p className="font-bold text-sm">{wo.customer}</p>
               <p className="mt-1">No.: <span className="font-semibold">{wo.id.replace('WO-', 'INV-')}</span></p>
+              {/* Termin Pembayaran info — di bawah no invoice */}
+              <div className="mt-1.5 inline-block bg-slate-100 border border-slate-300 rounded px-2 py-1 text-2xs leading-tight">
+                <span className="font-semibold">Termin: </span>
+                <span>{(wo.terminHari ?? 0) === 0 ? 'COD (Lunas di Tempat)' : `NET ${wo.terminHari} hari`}</span>
+                {wo.tanggalInvoice && (wo.terminHari ?? 0) > 0 && (
+                  <>
+                    <br />
+                    <span className="font-semibold">Tanggal Invoice: </span>
+                    <span>{fmtTanggalLong(wo.tanggalInvoice)}</span>
+                    {piutang.jatuhTempo && (
+                      <>
+                        <br />
+                        <span className="font-semibold">Jatuh Tempo: </span>
+                        <span className={piutang.isOverdue ? 'text-red-700 font-bold' : ''}>
+                          {fmtTanggalLong(piutang.jatuhTempo)}
+                          {piutang.isOverdue && piutang.hariKeJatuhTempo != null && ` (lewat ${Math.abs(piutang.hariKeJatuhTempo)} hari)`}
+                        </span>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
           {/* Table */}
-          <table className="w-full border border-black mb-4 text-xs">
+          <table className="w-full border border-black mb-4 text-xs relative" style={{ zIndex: 2 }}>
             <thead>
               <tr className="border-b border-black bg-slate-50">
                 <th className="py-1.5 px-2 border-r border-black text-center w-7">No.</th>
@@ -413,7 +465,7 @@ export default function PrintTemplates() {
           </table>
 
           {/* Tanda Tangan — 2 kolom: Penerima (kiri) + Direktur (kanan) */}
-          <div className="grid grid-cols-2 gap-4 items-end mt-2 px-1">
+          <div className="grid grid-cols-2 gap-4 items-end mt-2 px-1 relative" style={{ zIndex: 2 }}>
             {/* Penerima */}
             <div className="text-center">
               <p className="text-xs font-medium">Penerima,</p>

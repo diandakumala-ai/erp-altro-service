@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Bell, Package, X, Clock, DollarSign } from 'lucide-react';
+import { Bell, Package, X, Clock, DollarSign, AlertTriangle, CalendarClock } from 'lucide-react';
 import { useStore, computeStatusBayar } from '../store/useStore';
 import { Link } from 'react-router-dom';
 import { fmt } from '../lib/format';
@@ -8,7 +8,7 @@ import { isFinished } from './ui';
 
 interface NotifItem {
   id: string;
-  type: 'overdue' | 'stok' | 'piutang';
+  type: 'overdue' | 'stok' | 'piutang' | 'jatuhTempo' | 'akanJatuhTempo';
   title: string;
   desc: string;
   to: string;
@@ -71,8 +71,8 @@ export function NotificationBell() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  const { overdueItems, stokItems, piutangItems } = useMemo(() => {
-    // WO Overdue
+  const { overdueItems, stokItems, jatuhTempoItems, akanJatuhTempoItems, piutangItems } = useMemo(() => {
+    // WO Overdue (operational — terlambat selesaikan, beda dari overdue pembayaran)
     const overdueItems: NotifItem[] = workOrders
       .filter(w =>
         !isFinished(w.status) &&
@@ -107,11 +107,51 @@ export function NotificationBell() {
       }))
       .sort((a, b) => (a.severity === 'high' ? 0 : 1) - (b.severity === 'high' ? 0 : 1));
 
-    // Piutang (Belum Bayar & DP) — hitung status sekali per WO
-    const piutangItems: NotifItem[] = workOrders
+    // Hitung piutang sekali, kategorikan ke 3 bucket
+    const piutangAll = workOrders
       .filter(wo => wo.estimatedCost > 0)
       .map(wo => ({ wo, info: computeStatusBayar(wo, finance) }))
-      .filter(({ info }) => info.status === 'Belum Bayar' || info.status === 'DP')
+      .filter(({ info }) => info.status !== 'Lunas');
+
+    // Bucket 1: SUDAH lewat jatuh tempo — paling urgent
+    const jatuhTempoItems: NotifItem[] = piutangAll
+      .filter(({ info }) => info.isOverdue)
+      .map(({ wo, info }) => ({
+        id: `jt-${wo.id}`,
+        type: 'jatuhTempo' as const,
+        title: `${wo.id} — ${wo.customer}`,
+        desc: `Lewat ${Math.abs(info.hariKeJatuhTempo!)} hari · sisa Rp ${fmt(info.sisaTagihan)}`,
+        to: '/finance',
+        severity: 'high' as const,
+      }))
+      .sort((a, b) => {
+        // Sort by hari lewat terbanyak dulu (yang paling lama nunggak)
+        const aDays = parseInt(a.desc.match(/Lewat (\d+)/)?.[1] ?? '0', 10);
+        const bDays = parseInt(b.desc.match(/Lewat (\d+)/)?.[1] ?? '0', 10);
+        return bDays - aDays;
+      })
+      .slice(0, 10);
+
+    // Bucket 2: AKAN jatuh tempo dalam 3 hari
+    const akanJatuhTempoItems: NotifItem[] = piutangAll
+      .filter(({ info }) => info.isDueSoon && !info.isOverdue)
+      .map(({ wo, info }) => ({
+        id: `ajt-${wo.id}`,
+        type: 'akanJatuhTempo' as const,
+        title: `${wo.id} — ${wo.customer}`,
+        desc: info.hariKeJatuhTempo === 0
+          ? `Jatuh tempo hari ini · sisa Rp ${fmt(info.sisaTagihan)}`
+          : `${info.hariKeJatuhTempo} hari lagi · sisa Rp ${fmt(info.sisaTagihan)}`,
+        to: '/finance',
+        severity: (info.hariKeJatuhTempo === 0 ? 'high' : 'medium') as 'high' | 'medium',
+      }))
+      .sort((a, b) => (a.severity === 'high' ? 0 : 1) - (b.severity === 'high' ? 0 : 1))
+      .slice(0, 10);
+
+    // Bucket 3: Piutang lain (belum jatuh tempo / COD belum bayar / NET tanpa invoice)
+    // Exclude yang sudah masuk bucket 1 atau 2 untuk hindari duplikasi.
+    const piutangItems: NotifItem[] = piutangAll
+      .filter(({ info }) => !info.isOverdue && !info.isDueSoon)
       .map(({ wo, info }) => ({
         id: `piutang-${wo.id}`,
         type: 'piutang' as const,
@@ -123,10 +163,10 @@ export function NotificationBell() {
       .sort((a, b) => (a.severity === 'high' ? 0 : 1) - (b.severity === 'high' ? 0 : 1))
       .slice(0, 10);
 
-    return { overdueItems, stokItems, piutangItems };
+    return { overdueItems, stokItems, jatuhTempoItems, akanJatuhTempoItems, piutangItems };
   }, [workOrders, inventory, finance, today]);
 
-  const totalCount = overdueItems.length + stokItems.length + piutangItems.length;
+  const totalCount = overdueItems.length + stokItems.length + jatuhTempoItems.length + akanJatuhTempoItems.length + piutangItems.length;
 
   // Calculate dropdown position from button's bounding rect
   const DROPDOWN_W = 320; // sesuai class w-80
@@ -250,13 +290,34 @@ export function NotificationBell() {
               <p className="text-xs text-slate-400 mt-0.5">Tidak ada notifikasi saat ini</p>
             </div>
           ) : (
-            <div className="overflow-y-auto divide-y divide-slate-100" style={{ maxHeight: 380 }}>
+            <div className="overflow-y-auto divide-y divide-slate-100" style={{ maxHeight: 420 }}>
+              {/* Urutan: paling urgent dulu */}
+              {jatuhTempoItems.length > 0 && (
+                <NotifSection
+                  label="Tagihan Lewat Jatuh Tempo"
+                  icon={AlertTriangle}
+                  color="bg-red-100 text-red-700"
+                  items={jatuhTempoItems}
+                  emptyText=""
+                  onClose={close}
+                />
+              )}
+              {akanJatuhTempoItems.length > 0 && (
+                <NotifSection
+                  label="Akan Jatuh Tempo (≤3 hari)"
+                  icon={CalendarClock}
+                  color="bg-amber-100 text-amber-700"
+                  items={akanJatuhTempoItems}
+                  emptyText=""
+                  onClose={close}
+                />
+              )}
               <NotifSection
-                label="SPK Terlambat"
+                label="SPK Terlambat (operasional)"
                 icon={Clock}
                 color="bg-red-50 text-red-600"
                 items={overdueItems}
-                emptyText="Tidak ada WO yang terlambat"
+                emptyText="Tidak ada WO yang terlambat selesaikan"
                 onClose={close}
               />
               <NotifSection
@@ -268,7 +329,7 @@ export function NotificationBell() {
                 onClose={close}
               />
               <NotifSection
-                label="Piutang Belum Lunas"
+                label="Piutang Lain"
                 icon={DollarSign}
                 color="bg-orange-50 text-orange-600"
                 items={piutangItems}
@@ -281,14 +342,16 @@ export function NotificationBell() {
           {/* Footer */}
           {totalCount > 0 && (
             <div className="border-t border-slate-100 px-4 py-2 bg-slate-50 flex justify-between text-tiny text-slate-400 shrink-0">
-              <span>
-                {overdueItems.length > 0 && `${overdueItems.length} terlambat`}
-                {overdueItems.length > 0 && stokItems.length > 0 && ' · '}
-                {stokItems.length > 0 && `${stokItems.length} stok kritis`}
-                {(overdueItems.length > 0 || stokItems.length > 0) && piutangItems.length > 0 && ' · '}
-                {piutangItems.length > 0 && `${piutangItems.length} piutang`}
+              <span className="truncate">
+                {[
+                  jatuhTempoItems.length > 0 && `${jatuhTempoItems.length} lewat tempo`,
+                  akanJatuhTempoItems.length > 0 && `${akanJatuhTempoItems.length} akan tempo`,
+                  overdueItems.length > 0 && `${overdueItems.length} telat selesai`,
+                  stokItems.length > 0 && `${stokItems.length} stok`,
+                  piutangItems.length > 0 && `${piutangItems.length} piutang`,
+                ].filter(Boolean).join(' · ')}
               </span>
-              <span className="text-slate-300">Klik untuk detail →</span>
+              <span className="text-slate-300 shrink-0 ml-2">Klik untuk detail →</span>
             </div>
           )}
         </div>,
