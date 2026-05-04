@@ -8,3 +8,4 @@ export { StatCard } from './StatCard';
 export { SearchInput } from './SearchInput';
 export { EmptyState } from './EmptyState';
 export { ActionMenu, type MenuAction } from './ActionMenu';
+export { TerminSelector } from './TerminSelector';

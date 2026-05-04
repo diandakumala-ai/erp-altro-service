@@ -6,19 +6,37 @@ import type { ColDef, CellValueChangedEvent, ValueFormatterParams, ICellRenderer
 import { exportWorkOrders } from '../lib/exportExcel';
 import { toast } from '../lib/toast';
 import { confirm } from '../lib/confirm';
-import { Button, Badge, Dialog, DataHeader, DataCell, EmptyRow, EmptyState, StatCard, SearchInput, StatusPill, WO_STATUS, isFinished, ActionMenu, type SortDir, type WOStatus } from '../components/ui';
-import { fmt } from '../lib/format';
+import { Button, Badge, Dialog, DataHeader, DataCell, EmptyRow, EmptyState, StatCard, SearchInput, StatusPill, WO_STATUS, isFinished, ActionMenu, TerminSelector, type SortDir, type WOStatus } from '../components/ui';
+import { fmt, fmtTanggal } from '../lib/format';
+import { getJatuhTempo } from '../store/useStore';
 
 type StatusFilter = 'all' | 'active' | 'overdue' | WOStatus;
 
 
-function StatusBayarBadge({ status, sisa }: { status: StatusBayar; sisa: number }) {
+function StatusBayarBadge({
+  status, sisa, isOverdue, isDueSoon, hariKeJatuhTempo,
+}: {
+  status: StatusBayar; sisa: number;
+  isOverdue?: boolean; isDueSoon?: boolean; hariKeJatuhTempo?: number | null;
+}) {
   const tone = status === 'Belum Bayar' ? 'red' : status === 'DP' ? 'amber' : 'emerald';
   const label = status === 'DP' && sisa > 0 ? `DP · sisa ${fmt(sisa)}` : status;
   return (
-    <Badge tone={tone} bordered title={status === 'DP' ? `Sisa tagihan Rp ${fmt(sisa)}` : status}>
-      {label}
-    </Badge>
+    <div className="flex flex-col gap-1 items-start">
+      <Badge tone={tone} bordered title={status === 'DP' ? `Sisa tagihan Rp ${fmt(sisa)}` : status}>
+        {label}
+      </Badge>
+      {isOverdue && hariKeJatuhTempo != null && (
+        <Badge tone="red" bordered title={`Sudah lewat ${Math.abs(hariKeJatuhTempo)} hari dari jatuh tempo`}>
+          ⚠ Lewat {Math.abs(hariKeJatuhTempo)}h
+        </Badge>
+      )}
+      {!isOverdue && isDueSoon && hariKeJatuhTempo != null && (
+        <Badge tone="amber" bordered title={`Jatuh tempo dalam ${hariKeJatuhTempo} hari`}>
+          ⏰ {hariKeJatuhTempo === 0 ? 'Hari ini' : `${hariKeJatuhTempo}h lagi`}
+        </Badge>
+      )}
+    </div>
   );
 }
 
@@ -240,7 +258,13 @@ export default function WorkOrders() {
     if (!selectedWO) return;
     const matCost = boms.filter(b => b.woId === selectedWO.id).reduce((a, b) => a + b.jumlah * b.harga, 0);
     const svcCost = services.filter(s => s.woId === selectedWO.id).reduce((a, s) => a + s.biaya, 0);
-    updateWorkOrder({ ...selectedWO, estimatedCost: matCost + svcCost, diskon: selectedWO.diskon ?? 0 });
+    updateWorkOrder({
+      ...selectedWO,
+      estimatedCost: matCost + svcCost,
+      diskon: selectedWO.diskon ?? 0,
+      terminHari: selectedWO.terminHari ?? 0,
+      tanggalInvoice: selectedWO.tanggalInvoice,
+    });
     setSelectedWO(null);
   };
 
@@ -376,7 +400,13 @@ export default function WorkOrders() {
                     </td>
                     <td className="px-4 py-3">
                       {wo.estimatedCost > 0
-                        ? <StatusBayarBadge status={piutang.status} sisa={piutang.sisaTagihan} />
+                        ? <StatusBayarBadge
+                            status={piutang.status}
+                            sisa={piutang.sisaTagihan}
+                            isOverdue={piutang.isOverdue}
+                            isDueSoon={piutang.isDueSoon}
+                            hariKeJatuhTempo={piutang.hariKeJatuhTempo}
+                          />
                         : <span className="text-2xs italic text-slate-300">— belum ada biaya —</span>}
                     </td>
                     <td className="px-4 py-3">
@@ -469,6 +499,57 @@ export default function WorkOrders() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+
+              {/* Termin Pembayaran & Tanggal Invoice */}
+              <div className="bg-white border border-indigo-200 rounded-lg shadow-sm p-4">
+                <div className="mb-3">
+                  <h4 className="font-semibold text-slate-700">Termin Pembayaran</h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Pilih termin pembayaran. <b>COD</b> = lunas saat barang diserahkan (auto-record pelunasan saat status Finished).
+                    <b>NET</b> = pelanggan punya N hari setelah tanggal invoice untuk bayar.
+                  </p>
+                </div>
+                <TerminSelector
+                  id="wo-termin"
+                  value={selectedWO.terminHari ?? 0}
+                  onChange={(v) => setSelectedWO({ ...selectedWO, terminHari: v })}
+                />
+
+                {/* Tanggal Invoice — hanya tampil bila NET (terminHari > 0) */}
+                {(selectedWO.terminHari ?? 0) > 0 && (
+                  <div className="mt-4 pt-4 border-t border-slate-100 flex items-end gap-3 flex-wrap">
+                    <div>
+                      <label htmlFor="wo-tanggal-invoice" className="text-xs text-slate-500 font-medium block mb-1">Tanggal Terbit Invoice</label>
+                      <input
+                        id="wo-tanggal-invoice"
+                        type="date"
+                        value={selectedWO.tanggalInvoice ?? ''}
+                        onChange={e => setSelectedWO({ ...selectedWO, tanggalInvoice: e.target.value || undefined })}
+                        className="px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 bg-white"
+                      />
+                      <p className="text-tiny text-slate-400 mt-1">
+                        {selectedWO.tanggalInvoice
+                          ? 'Bisa di-override manual.'
+                          : 'Akan auto-set saat status pertama kali Finished.'}
+                      </p>
+                    </div>
+                    {selectedWO.tanggalInvoice && (
+                      <div className="flex-1 min-w-[200px] bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2">
+                        <p className="text-tiny text-indigo-600 font-semibold uppercase tracking-wider">Jatuh Tempo</p>
+                        <p className="text-sm font-bold text-indigo-800">
+                          {(() => {
+                            const jt = getJatuhTempo(selectedWO);
+                            return jt ? fmtTanggal(jt) : '—';
+                          })()}
+                        </p>
+                        <p className="text-tiny text-indigo-600 mt-0.5">
+                          NET {selectedWO.terminHari} hari dari tanggal invoice
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Diskon */}

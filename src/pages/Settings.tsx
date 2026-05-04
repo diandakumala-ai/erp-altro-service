@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { Save, Building2, User, Phone, Mail, MapPin, FileText, Eye, EyeOff, Upload, Trash2, Lock, Loader2, ShieldCheck } from 'lucide-react';
+import { Save, Building2, User, Phone, Mail, MapPin, FileText, Eye, EyeOff, Upload, Trash2, Lock, Loader2, ShieldCheck, CalendarClock } from 'lucide-react';
 import { useStore, type BengkelSettings } from '../store/useStore';
 import { toast } from '../lib/toast';
 import { supabase } from '../lib/supabase';
-import { Button, Section as UISection } from '../components/ui';
+import { Button, Section as UISection, TerminSelector } from '../components/ui';
 
 function FormField({
   label, value, onChange, placeholder, icon: Icon, hint,
@@ -457,6 +457,31 @@ export default function Settings() {
 
           {/* Preview */}
           <KopSuratPreview s={form} />
+
+          {/* Default Termin Pembayaran */}
+          <UISection
+            title="Default Termin Pembayaran"
+            icon={CalendarClock}
+            accent="indigo"
+            rightSlot={<span className="text-tiny text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Otomatis untuk SPK baru</span>}
+          >
+            <div className="flex flex-col gap-3">
+              <p className="text-xs text-slate-500">
+                Setiap WO baru akan otomatis pakai termin ini. Bisa di-override per WO di
+                modal "Detail Pekerjaan & Material". <b>COD</b> = lunas saat barang diserahkan
+                (auto-record pelunasan saat status Finished). <b>NET</b> = pelanggan punya N hari
+                untuk bayar setelah tanggal invoice terbit.
+              </p>
+              <TerminSelector
+                id="default-termin"
+                value={form.defaultTerminHari ?? 0}
+                onChange={(v) => { setForm(prev => ({ ...prev, defaultTerminHari: v })); setDirty(true); }}
+              />
+              <div className="text-tiny text-slate-400 italic">
+                Saat ini default: <b>{(form.defaultTerminHari ?? 0) === 0 ? 'COD (Lunas di Tempat)' : `NET ${form.defaultTerminHari} hari`}</b>
+              </div>
+            </div>
+          </UISection>
 
           {/* Akun & Keamanan */}
           <PasswordChangePanel />

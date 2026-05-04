@@ -854,9 +854,9 @@ export default function Finance() {
                 <p className="text-2xs text-slate-500 mt-0.5">Pembayaran lengkap</p>
               </div>
               <div className="bg-white px-4 py-3 rounded-lg border border-slate-200 shadow-sm border-l-4 border-l-red-500">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Belum Bayar Sama Sekali</p>
-                <h3 className="text-lg font-bold text-red-700">{piutangList.filter(p => p.info.status === 'Belum Bayar').length} WO</h3>
-                <p className="text-2xs text-slate-500 mt-0.5">Belum ada pembayaran tercatat</p>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Lewat Jatuh Tempo</p>
+                <h3 className="text-lg font-bold text-red-700">{piutangList.filter(p => p.info.isOverdue).length} WO</h3>
+                <p className="text-2xs text-slate-500 mt-0.5">Tagihan harus segera ditagih</p>
               </div>
             </div>
 
@@ -872,22 +872,27 @@ export default function Finance() {
                 </div>
               ) : (
                 <div className="overflow-auto">
-                  <table className="w-full text-sm border-collapse min-w-[900px]">
-                    <thead className="bg-slate-50 sticky top-0">
+                  <table className="w-full text-sm border-collapse min-w-[1100px]">
+                    <thead className="bg-slate-50 sticky top-0" style={{ zIndex: 'var(--z-sticky)' }}>
                       <tr className="border-b border-slate-200">
                         <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">No. WO</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Pelanggan</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Item</th>
-                        <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider w-36">Total Tagihan</th>
-                        <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider w-36">Sudah Dibayar</th>
-                        <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider w-36">Sisa Tagihan</th>
-                        <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">Status</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">Total Tagihan</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">Sudah Dibayar</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">Sisa Tagihan</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-36">Jatuh Tempo</th>
+                        <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-28">Status</th>
                         <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-28">Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
                       {piutangList.map(({ wo, info }, i) => (
-                        <tr key={wo.id} className={`border-b border-slate-100 hover:bg-amber-50/40 transition-colors ${i % 2 === 1 ? 'bg-slate-50/50' : ''}`}>
+                        <tr key={wo.id} className={`border-b border-slate-100 transition-colors ${
+                          info.isOverdue ? 'bg-red-50/40 hover:bg-red-50/70' :
+                          info.isDueSoon ? 'bg-amber-50/30 hover:bg-amber-50/60' :
+                          i % 2 === 1 ? 'bg-slate-50/50 hover:bg-amber-50/40' : 'hover:bg-amber-50/40'
+                        }`}>
                           <td className="px-4 py-3 font-mono text-xs font-medium text-slate-700">{wo.id}</td>
                           <td className="px-4 py-3 text-slate-800 font-medium">{wo.customer}</td>
                           <td className="px-4 py-3 text-slate-600 text-xs">{wo.merk}</td>
@@ -899,6 +904,24 @@ export default function Finance() {
                           </td>
                           <td className="px-4 py-3 text-right font-medium text-emerald-600">Rp {fmt(info.totalBayar)}</td>
                           <td className="px-4 py-3 text-right font-bold text-amber-700">Rp {fmt(info.sisaTagihan)}</td>
+                          <td className="px-4 py-3 text-xs">
+                            {info.jatuhTempo ? (
+                              <div>
+                                <div className={`font-medium ${info.isOverdue ? 'text-red-700' : info.isDueSoon ? 'text-amber-700' : 'text-slate-700'}`}>
+                                  {new Date(info.jatuhTempo).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                </div>
+                                <div className={`text-2xs ${info.isOverdue ? 'text-red-600' : info.isDueSoon ? 'text-amber-600' : 'text-slate-400'}`}>
+                                  {info.isOverdue && info.hariKeJatuhTempo != null && `🔴 Lewat ${Math.abs(info.hariKeJatuhTempo)} hari`}
+                                  {!info.isOverdue && info.isDueSoon && info.hariKeJatuhTempo != null && (info.hariKeJatuhTempo === 0 ? '⏰ Hari ini' : `⏰ ${info.hariKeJatuhTempo} hari lagi`)}
+                                  {!info.isOverdue && !info.isDueSoon && info.hariKeJatuhTempo != null && `${info.hariKeJatuhTempo} hari lagi`}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-slate-300 italic text-xs">
+                                {(wo.terminHari ?? 0) === 0 ? 'COD' : 'Invoice belum terbit'}
+                              </span>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-center">
                             <span className={`inline-block px-2 py-0.5 rounded-full text-2xs uppercase tracking-wider font-bold border ${
                               info.status === 'Belum Bayar' ? 'bg-red-50 text-red-700 border-red-200' :
@@ -936,7 +959,7 @@ export default function Finance() {
                       <tr className="bg-slate-50 border-t-2 border-slate-300">
                         <td colSpan={5} className="px-4 py-3 text-right font-bold text-slate-700">Total Piutang Keseluruhan:</td>
                         <td className="px-4 py-3 text-right font-bold text-amber-700 text-base">Rp {fmt(totalPiutang)}</td>
-                        <td colSpan={2}></td>
+                        <td colSpan={3}></td>
                       </tr>
                     </tfoot>
                   </table>
