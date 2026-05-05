@@ -201,7 +201,7 @@ const ITEMS_PER_BUCKET = 5; // tampil maks 5 per kategori, sisanya "+N lainnya"
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
-  const [dropPos, setDropPos] = useState<{ top: number; left: number } | null>(null);
+  const [dropPos, setDropPos] = useState<{ top: number; left: number; maxH: number; width: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
   const workOrders = useStore(s => s.workOrders);
@@ -388,18 +388,43 @@ export function NotificationBell() {
 
   // ── Drop position ──────────────────────────────────────────────────────────
   const DROPDOWN_W = 384; // w-96
+  const VIEWPORT_PADDING = 16;
   const computePosition = useCallback(() => {
     if (!btnRef.current) return null;
     const rect = btnRef.current.getBoundingClientRect();
-    const dropH = Math.min(560, window.innerHeight - 32);
-    const top = rect.bottom + rect.top - dropH > 16 ? rect.bottom - dropH : rect.top;
+    const vh = window.innerHeight;
+    const vw = window.innerWidth;
+
+    // Mobile: jadikan sheet centered, full-width minus padding
+    if (vw < 480) {
+      return {
+        top: VIEWPORT_PADDING,
+        left: VIEWPORT_PADDING,
+        maxH: vh - VIEWPORT_PADDING * 2,
+        width: vw - VIEWPORT_PADDING * 2,
+      };
+    }
+
+    // Desktop: anchor di samping bell (sidebar bottom). Dropdown grows upward.
+    const targetH = Math.min(560, vh - VIEWPORT_PADDING * 2);
+    // Mau bottom-align dropdown ke rect.bottom kalau muat. Kalau ndak, top-align.
+    const roomAbove = rect.bottom - VIEWPORT_PADDING;
+    const top = roomAbove >= targetH
+      ? rect.bottom - targetH
+      : VIEWPORT_PADDING;
+
     let left = rect.right + 12;
-    if (left + DROPDOWN_W > window.innerWidth - 8) {
+    if (left + DROPDOWN_W > vw - 8) {
+      // Tidak muat di kanan → tampilkan di kiri bell
       left = Math.max(8, rect.left - DROPDOWN_W - 12);
     }
+    // Final clamp
+    const clampedTop = Math.max(VIEWPORT_PADDING, Math.min(top, vh - targetH - VIEWPORT_PADDING));
     return {
-      top: Math.max(8, Math.min(top, window.innerHeight - dropH - 8)),
+      top: clampedTop,
       left,
+      maxH: targetH,
+      width: DROPDOWN_W,
     };
   }, []);
 
@@ -504,22 +529,33 @@ export function NotificationBell() {
           id="notif-dropdown"
           role="dialog"
           aria-label="Daftar notifikasi"
-          style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, zIndex: 'var(--z-dropdown)' }}
-          className="w-96 max-w-[calc(100vw-1rem)] bg-white border border-slate-200 rounded-xl shadow-2xl flex flex-col overflow-hidden animate-slide-up"
+          style={{
+            position: 'fixed',
+            top: dropPos.top,
+            left: dropPos.left,
+            width: dropPos.width,
+            maxHeight: dropPos.maxH,
+            zIndex: 'var(--z-dropdown)',
+          }}
+          className="bg-white border border-slate-200 rounded-xl shadow-2xl flex flex-col overflow-hidden animate-slide-up"
         >
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-slate-800 shrink-0">
+          {/* Header — light, less screaming */}
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 shrink-0 bg-white">
             <div className="flex items-center gap-2 min-w-0">
-              <Bell className="w-4 h-4 text-slate-300 shrink-0" aria-hidden="true" />
-              <h4 className="text-sm font-semibold text-white">Notifikasi</h4>
+              <Bell className="w-4 h-4 text-slate-500 shrink-0" aria-hidden="true" />
+              <h4 className="text-sm font-semibold text-slate-800">Notifikasi</h4>
               {totalActive > 0 && (
-                <span className="bg-red-500 text-white text-2xs font-bold px-1.5 py-0.5 rounded-full leading-none shrink-0">
-                  {totalActive}
+                <span
+                  className={`text-2xs font-bold px-1.5 py-0.5 rounded-full leading-none shrink-0 text-white ${
+                    hasCritical ? 'bg-red-500' : 'bg-amber-500'
+                  }`}
+                >
+                  {totalActive > 99 ? '99+' : totalActive}
                 </span>
               )}
               {buckets.snoozedCount > 0 && (
                 <span
-                  className="text-2xs text-slate-300 truncate"
+                  className="text-2xs text-slate-400 truncate"
                   title={`${buckets.snoozedCount} notifikasi sedang ditunda`}
                 >
                   · {buckets.snoozedCount} ditunda
@@ -528,16 +564,16 @@ export function NotificationBell() {
             </div>
             <button
               onClick={close}
-              className="text-slate-400 hover:text-white transition-colors p-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
+              className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors p-1 -mr-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
               aria-label="Tutup notifikasi"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Body */}
+          {/* Body — flex-1 + min-h-0 agar respect maxHeight container */}
           {totalActive === 0 ? (
-            <div className="py-12 px-6 text-center">
+            <div className="py-12 px-6 text-center flex-1 min-h-0 overflow-y-auto">
               <div className="w-14 h-14 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-3">
                 <CheckCircle2 className="w-7 h-7 text-emerald-500" aria-hidden="true" />
               </div>
@@ -558,12 +594,12 @@ export function NotificationBell() {
               )}
             </div>
           ) : (
-            <div className="overflow-y-auto" style={{ maxHeight: 480 }}>
+            <div className="overflow-y-auto flex-1 min-h-0">
               {/* Urutan: paling urgent dulu */}
               <NotifSection
                 label="Lewat Jatuh Tempo"
                 icon={AlertTriangle}
-                color="bg-red-100 text-red-700"
+                color="bg-red-50 text-red-700 border-b border-red-100"
                 items={sliced.jatuhTempo.items}
                 hiddenCount={sliced.jatuhTempo.hidden}
                 viewAllTo="/finance"
@@ -573,7 +609,7 @@ export function NotificationBell() {
               <NotifSection
                 label="Akan Jatuh Tempo (≤3 hari)"
                 icon={CalendarClock}
-                color="bg-amber-100 text-amber-700"
+                color="bg-amber-50 text-amber-700 border-b border-amber-100"
                 items={sliced.akanJatuhTempo.items}
                 hiddenCount={sliced.akanJatuhTempo.hidden}
                 viewAllTo="/finance"
@@ -583,7 +619,7 @@ export function NotificationBell() {
               <NotifSection
                 label="SPK Telat Selesai"
                 icon={Clock}
-                color="bg-red-50 text-red-600"
+                color="bg-rose-50 text-rose-700 border-b border-rose-100"
                 items={sliced.overdue.items}
                 hiddenCount={sliced.overdue.hidden}
                 viewAllTo="/work-orders"
@@ -593,7 +629,7 @@ export function NotificationBell() {
               <NotifSection
                 label="Stok Kritis"
                 icon={Package}
-                color="bg-amber-50 text-amber-700"
+                color="bg-yellow-50 text-yellow-800 border-b border-yellow-100"
                 items={sliced.stok.items}
                 hiddenCount={sliced.stok.hidden}
                 viewAllTo="/inventory"
@@ -603,7 +639,7 @@ export function NotificationBell() {
               <NotifSection
                 label="Piutang Belum Tempo"
                 icon={DollarSign}
-                color="bg-orange-50 text-orange-700"
+                color="bg-orange-50 text-orange-700 border-b border-orange-100"
                 items={sliced.piutangLain.items}
                 hiddenCount={sliced.piutangLain.hidden}
                 viewAllTo="/finance"
@@ -613,28 +649,23 @@ export function NotificationBell() {
             </div>
           )}
 
-          {/* Footer */}
+          {/* Footer — compact single line */}
           {totalActive > 0 && (
-            <div className="border-t border-slate-100 px-4 py-2.5 bg-slate-50 shrink-0">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-2xs text-slate-500">
-                  Diperbarui {lastUpdatedLabel}
-                </span>
-                {buckets.snoozedCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={resetSnooze}
-                    className="inline-flex items-center gap-1 text-2xs text-indigo-600 hover:text-indigo-800 font-medium focus-visible:outline-none focus-visible:underline"
-                    title="Tampilkan kembali notifikasi yang ditunda"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    Reset {buckets.snoozedCount} tunda
-                  </button>
-                )}
-              </div>
-              <p className="text-2xs text-slate-400 mt-1 italic">
-                Klik ikon <BellOff className="w-2.5 h-2.5 inline-block align-text-bottom" /> di kanan baris untuk tunda 24 jam.
-              </p>
+            <div className="border-t border-slate-200 px-4 py-2 bg-slate-50 shrink-0 flex items-center justify-between gap-2">
+              <span className="text-2xs text-slate-500 truncate">
+                Diperbarui {lastUpdatedLabel}
+              </span>
+              {buckets.snoozedCount > 0 && (
+                <button
+                  type="button"
+                  onClick={resetSnooze}
+                  className="inline-flex items-center gap-1 text-2xs text-indigo-600 hover:text-indigo-800 font-medium focus-visible:outline-none focus-visible:underline shrink-0"
+                  title="Tampilkan kembali notifikasi yang ditunda"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Reset {buckets.snoozedCount} tunda
+                </button>
+              )}
             </div>
           )}
         </div>,
