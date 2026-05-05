@@ -4,6 +4,7 @@ import { useStore, type BengkelSettings } from '../store/useStore';
 import { toast } from '../lib/toast';
 import { supabase } from '../lib/supabase';
 import { Button, Section as UISection, TerminSelector } from '../components/ui';
+import { cityShort } from '../lib/format';
 
 function FormField({
   label, value, onChange, placeholder, icon: Icon, hint,
@@ -79,7 +80,7 @@ function KopSuratPreview({ s }: { s: BengkelSettings }) {
           {/* Signature preview */}
           <div className="mt-4 flex justify-end">
             <div className="text-center text-xs text-slate-500 w-40">
-              <p>{s.kota || 'Kota'}, ___________</p>
+              <p>{cityShort(s.kota) || 'Kota'}, ___________</p>
               <div className="h-10 border-b border-dashed border-slate-300 my-2" />
               <p className="font-semibold text-slate-700">{s.namaPemilik || '( Nama Pemilik )'}</p>
               <p className="text-slate-400">{s.jabatanPemilik || 'Jabatan'}</p>

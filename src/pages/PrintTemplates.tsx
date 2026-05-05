@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useStore, computeStatusBayar } from '../store/useStore';
+import { cityShort } from '../lib/format';
 
 const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(n);
 
@@ -245,7 +246,7 @@ export default function PrintTemplates() {
 
           <div className="mt-10 flex justify-end">
             <div className="text-center w-52">
-              <p className="text-xs mb-14">{bs.kota || 'Pekanbaru'}, {today}</p>
+              <p className="text-xs mb-14">{cityShort(bs.kota) || 'Pekanbaru'}, {today}</p>
               <div className="border-t border-slate-700 pt-1">
                 <p className="text-xs font-bold">{bs.namaPemilik || 'Bagian Keuangan'}</p>
                 <p className="text-xs text-slate-500">{bs.jabatanPemilik || bs.namaBengkel}</p>
@@ -388,7 +389,7 @@ export default function PrintTemplates() {
             </div>
             <div className="text-right text-xs">
               <p className={`font-bold text-base uppercase tracking-wide border-b border-black pb-1 mb-2 ${variant === 'dp' ? 'text-emerald-700' : variant === 'pelunasan' ? 'text-amber-700' : ''}`}>{headerTitle}</p>
-              <p>{bs.kota || 'Pekanbaru'}, {today}</p>
+              <p>{cityShort(bs.kota) || 'Pekanbaru'}, {today}</p>
               <p className="mt-1">Kepada Yth,</p>
               <p className="font-bold text-sm">{wo.customer}</p>
               <p className="mt-1">No.: <span className="font-semibold">{invoiceNo}</span></p>
@@ -558,7 +559,7 @@ export default function PrintTemplates() {
             </div>
             {/* Direktur */}
             <div className="text-center">
-              <p className="text-2xs text-gray-500">{bs.kota || 'Pekanbaru'}, {today}</p>
+              <p className="text-2xs text-gray-500">{cityShort(bs.kota) || 'Pekanbaru'}, {today}</p>
               <p className="text-xs font-medium mt-0.5">Hormat Kami,</p>
               <div className="h-14 mt-1"></div>
               <div className="pt-1.5">
@@ -755,7 +756,7 @@ export default function PrintTemplates() {
             <div className="text-right">
               <h2 className="text-base font-bold uppercase mb-1">Surat Jalan</h2>
               <p className="text-xs">No.: <span className="font-semibold">{wo.id}</span></p>
-              <p className="text-xs">{bs.kota || 'Pekanbaru'}, {today}</p>
+              <p className="text-xs">{cityShort(bs.kota) || 'Pekanbaru'}, {today}</p>
             </div>
           </div>
 
@@ -820,7 +821,7 @@ export default function PrintTemplates() {
 
             {/* Direktur */}
             <div className="text-center">
-              <p className="text-2xs text-gray-500">{bs.kota || 'Pekanbaru'}, {today}</p>
+              <p className="text-2xs text-gray-500">{cityShort(bs.kota) || 'Pekanbaru'}, {today}</p>
               <p className="text-xs font-medium mt-0.5">Hormat Kami,</p>
               <div className="h-14 mt-1"></div>
               <div className="pt-1.5">

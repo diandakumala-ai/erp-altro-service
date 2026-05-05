@@ -38,3 +38,18 @@ export const fmtTanggalPendek = (iso: string): string => {
   if (isNaN(d.getTime())) return iso;
   return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
 };
+
+/**
+ * Ekstrak nama kota saja dari setting `kota` yang biasa diisi
+ * "Kota, Provinsi" (mis. "Pekanbaru, Riau"). Dipakai di tempat
+ * tanda tangan dokumen ("Pekanbaru, 5 Mei 2026") agar tidak
+ * tampilkan provinsi (sudah ada di kop alamat).
+ *
+ * `"Pekanbaru, Riau"` → `"Pekanbaru"`
+ * `"Pekanbaru"`        → `"Pekanbaru"`
+ * `""`                 → `""`
+ */
+export const cityShort = (kota: string | undefined | null): string => {
+  if (!kota) return '';
+  return kota.split(',')[0].trim();
+};
