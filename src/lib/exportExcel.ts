@@ -233,8 +233,10 @@ export function exportWorkOrders(
       'No. WO': wo.id,
       'Tgl Masuk': wo.dateIn,
       'Pelanggan': wo.customer,
+      'Qty': wo.qty ?? 1,
+      'Satuan': wo.qtySatuan || 'UNIT',
       'Merk/Jenis': wo.merk,
-      'Kapasitas': wo.capacity,
+      'Deskripsi': wo.capacity,
       'Keluhan': wo.keluhan,
       'Status WO': wo.status,
       'Teknisi': wo.technician,
@@ -463,7 +465,8 @@ export function exportLaporanLengkap(
     const terminLabel = (wo.terminHari ?? 0) === 0 ? 'COD' : `NET ${wo.terminHari}`;
     return {
       'No. WO': wo.id, 'Tgl Masuk': wo.dateIn, 'Pelanggan': wo.customer,
-      'Merk': wo.merk, 'Kapasitas': wo.capacity, 'Keluhan': wo.keluhan,
+      'Qty': wo.qty ?? 1, 'Satuan': wo.qtySatuan || 'UNIT',
+      'Merk': wo.merk, 'Deskripsi': wo.capacity, 'Keluhan': wo.keluhan,
       'Status': wo.status, 'Teknisi': wo.technician, 'Est. Selesai': wo.estimasiSelesai,
       'Est. Biaya (Rp)': wo.estimatedCost,
       'Termin': terminLabel,

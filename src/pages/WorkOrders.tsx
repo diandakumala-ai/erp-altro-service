@@ -6,7 +6,7 @@ import type { ColDef, CellValueChangedEvent, ValueFormatterParams, ICellRenderer
 import { exportWorkOrders } from '../lib/exportExcel';
 import { toast } from '../lib/toast';
 import { confirm } from '../lib/confirm';
-import { Button, Badge, Dialog, DataHeader, DataCell, EmptyRow, EmptyState, StatCard, SearchInput, StatusPill, WO_STATUS, isFinished, ActionMenu, TerminSelector, type SortDir, type WOStatus } from '../components/ui';
+import { Button, Badge, Dialog, DataHeader, DataCell, EmptyRow, EmptyState, StatCard, SearchInput, StatusPill, WO_STATUS, isFinished, ActionMenu, TerminSelector, CustomerAutocomplete, type SortDir, type WOStatus } from '../components/ui';
 import { fmt, fmtTanggal } from '../lib/format';
 import { getJatuhTempo } from '../store/useStore';
 
@@ -37,6 +37,54 @@ function StatusBayarBadge({
         </Badge>
       )}
     </div>
+  );
+}
+
+/** Cell pelanggan inline — display + autocomplete saat di-edit. */
+function CustomerCell({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+  const customers = useStore(s => s.customers);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  const startEdit = () => { setDraft(value); setEditing(true); };
+  const finish = (v: string) => {
+    if (v !== value) onSave(v);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div onBlur={(e) => {
+        // Tutup hanya kalau focus benar2 keluar dari container
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          finish(draft);
+        }
+      }}>
+        <CustomerAutocomplete
+          value={draft}
+          customers={customers}
+          onChange={setDraft}
+          onSelect={(c) => {
+            const display = c.perusahaan && c.perusahaan !== '-' ? c.perusahaan : c.nama;
+            finish(display);
+          }}
+          ariaLabel="Edit pelanggan"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      aria-label="Edit pelanggan. Tekan Enter untuk mengubah."
+      className="cursor-pointer hover:text-indigo-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 rounded inline-block"
+      onDoubleClick={startEdit}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); startEdit(); } }}
+    >
+      {value || <span className="text-slate-300">—</span>}
+    </span>
   );
 }
 
@@ -203,13 +251,17 @@ export default function WorkOrders() {
   const update = (wo: WorkOrder, field: keyof WorkOrder, value: string) =>
     updateWorkOrder({ ...wo, [field]: value });
 
+  /** Update field numerik (parse string ke Number, fallback 0). */
+  const updateNumeric = (wo: WorkOrder, field: keyof WorkOrder, value: string) =>
+    updateWorkOrder({ ...wo, [field]: Number(value) || 0 });
+
   const handleAddWO = () => {
     const prefix = `WO-${new Date().toISOString().slice(2, 7).replace('-', '')}`;
     let max = 0;
     workOrders.forEach(wo => { const n = parseInt(wo.id.split('-').at(-1)!, 10); if (!isNaN(n) && n > max) max = n; });
     const newId = `${prefix}-${String(max + 1).padStart(3, '0')}`;
     newRowIdRef.current = newId;
-    addWorkOrder({ id: newId, customer: 'Pelanggan Baru', merk: 'Barang Baru', capacity: '-', keluhan: '-', status: 'Queue', technician: '-', dateIn: new Date().toISOString().split('T')[0], estimasiSelesai: '-', estimatedCost: 0 });
+    addWorkOrder({ id: newId, customer: 'Pelanggan Baru', merk: 'Barang Baru', capacity: '-', keluhan: '-', status: 'Queue', technician: '-', dateIn: new Date().toISOString().split('T')[0], estimasiSelesai: '-', estimatedCost: 0, qty: 1, qtySatuan: 'UNIT' });
     // Scroll after state update
     setTimeout(() => {
       const row = tableBodyRef.current?.querySelector(`[data-id="${newId}"]`);
@@ -219,8 +271,8 @@ export default function WorkOrders() {
   };
 
   const handleExport = () => {
-    const header = 'ID,Pelanggan,Merk,Kapasitas,Status,Teknisi,Tgl Masuk,Est. Selesai,Total Biaya';
-    const rows = workOrders.map(w => `${w.id},${w.customer},${w.merk},${w.capacity},${w.status},${w.technician},${w.dateIn},${w.estimasiSelesai},${w.estimatedCost}`);
+    const header = 'ID,Pelanggan,Qty,Satuan,Merk,Deskripsi,Status,Teknisi,Tgl Masuk,Est. Selesai,Total Biaya';
+    const rows = workOrders.map(w => `${w.id},${w.customer},${w.qty ?? 1},${w.qtySatuan || 'UNIT'},${w.merk},${w.capacity},${w.status},${w.technician},${w.dateIn},${w.estimasiSelesai},${w.estimatedCost}`);
     const blob = new Blob([header + '\n' + rows.join('\n')], { type: 'text/csv' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'WorkOrders.csv'; a.click();
   };
@@ -268,6 +320,8 @@ export default function WorkOrders() {
       terminHari: selectedWO.terminHari ?? 0,
       tanggalInvoice: selectedWO.tanggalInvoice,
       dpAmount: clampedDp,
+      qty: Math.max(1, selectedWO.qty ?? 1),
+      qtySatuan: (selectedWO.qtySatuan || 'UNIT').trim() || 'UNIT',
     });
     setSelectedWO(null);
   };
@@ -332,13 +386,14 @@ export default function WorkOrders() {
           </div>
 
           <div className="flex-1 overflow-auto">
-            <table className="w-full text-sm border-collapse min-w-[1100px]">
+            <table className="w-full text-sm border-collapse min-w-[1200px]">
               <thead className="bg-slate-50 sticky top-0" style={{ zIndex: 'var(--z-sticky)' }}>
                 <tr className="border-b border-slate-200">
                   <DataHeader label="ID" field="id" w="w-32" {...thProps} />
                   <DataHeader label="Pelanggan" field="customer" {...thProps} />
+                  <DataHeader label="Qty" field="qty" w="w-20" {...thProps} />
                   <DataHeader label="Item / Merk" field="merk" {...thProps} />
-                  <DataHeader label="Kapasitas" field="capacity" w="w-24" {...thProps} />
+                  <DataHeader label="Deskripsi" field="capacity" w="w-32" {...thProps} />
                   <DataHeader label="Status" field="status" w="w-28" {...thProps} />
                   <DataHeader label="Teknisi" field="technician" w="w-28" {...thProps} />
                   <DataHeader label="Tgl Masuk" field="dateIn" w="w-28" {...thProps} />
@@ -350,7 +405,7 @@ export default function WorkOrders() {
               </thead>
               <tbody ref={tableBodyRef}>
                 {filtered.length === 0 && (
-                  <EmptyRow colSpan={11} message={
+                  <EmptyRow colSpan={12} message={
                     search || statusFilter !== 'all' ? (
                       <EmptyState
                         icon={Wrench}
@@ -381,9 +436,15 @@ export default function WorkOrders() {
                   return (
                   <tr key={wo.id} data-id={wo.id} className={`border-b border-slate-100 hover:bg-indigo-50/40 transition-colors ${i % 2 === 1 ? 'bg-slate-50/50' : ''}`}>
                     <td className="px-4 py-3 font-mono text-xs font-medium text-slate-700 whitespace-nowrap">{wo.id}</td>
-                    <td className="px-4 py-3 text-slate-800 min-w-[140px]"><DataCell value={wo.customer} onSave={v => update(wo, 'customer', v)} ariaLabel="Edit pelanggan" /></td>
+                    <td className="px-4 py-3 text-slate-800 min-w-[140px]"><CustomerCell value={wo.customer} onSave={v => update(wo, 'customer', v)} /></td>
+                    <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
+                      <span className="inline-flex items-baseline gap-1">
+                        <DataCell value={wo.qty ?? 1} onSave={v => updateNumeric(wo, 'qty', v)} type="number" numericFormat ariaLabel="Edit jumlah unit" />
+                        <span className="text-2xs text-slate-400 font-normal">{wo.qtySatuan || 'UNIT'}</span>
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-slate-700 min-w-[120px]"><DataCell value={wo.merk} onSave={v => update(wo, 'merk', v)} ariaLabel="Edit merk" /></td>
-                    <td className="px-4 py-3 text-slate-600"><DataCell value={wo.capacity} onSave={v => update(wo, 'capacity', v)} ariaLabel="Edit kapasitas" /></td>
+                    <td className="px-4 py-3 text-slate-600"><DataCell value={wo.capacity} onSave={v => update(wo, 'capacity', v)} ariaLabel="Edit deskripsi" /></td>
                     <td className="px-4 py-3"><StatusCell value={wo.status} onSave={v => update(wo, 'status', v)} /></td>
                     <td className="px-4 py-3 text-slate-700"><DataCell value={wo.technician} onSave={v => update(wo, 'technician', v)} ariaLabel="Edit teknisi" /></td>
                     <td className="px-4 py-3 text-slate-600 text-xs whitespace-nowrap"><DataCell value={wo.dateIn} onSave={v => update(wo, 'dateIn', v)} type="date" ariaLabel="Edit tanggal masuk" /></td>
@@ -481,6 +542,71 @@ export default function WorkOrders() {
               <div className="bg-blue-50 border border-blue-200 px-4 py-3 rounded-lg text-sm text-blue-800">
                 Edit nilai di sel secara langsung. Klik <b>Simpan & Update Biaya WO</b> untuk memperbarui total biaya.
               </div>
+
+              {/* Item Utama — Qty/Satuan/Merk/Deskripsi (untuk dicetak di SPK/Invoice/Surat Jalan) */}
+              <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4">
+                <div className="mb-3">
+                  <h4 className="font-semibold text-slate-700">Item Utama</h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Detail item yang akan tampil di kop tabel SPK, Invoice, dan Surat Jalan.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                  <div className="sm:col-span-2">
+                    <label htmlFor="wo-qty" className="text-xs text-slate-500 font-medium block mb-1">Qty</label>
+                    <input
+                      id="wo-qty" type="number" min={1} step={1}
+                      value={selectedWO.qty ?? 1}
+                      onChange={e => setSelectedWO({ ...selectedWO, qty: Math.max(1, Number(e.target.value) || 1) })}
+                      className="w-full px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label htmlFor="wo-qty-satuan" className="text-xs text-slate-500 font-medium block mb-1">Satuan</label>
+                    <input
+                      id="wo-qty-satuan" type="text" maxLength={20}
+                      value={selectedWO.qtySatuan ?? 'UNIT'}
+                      onChange={e => setSelectedWO({ ...selectedWO, qtySatuan: e.target.value.toUpperCase() })}
+                      placeholder="UNIT"
+                      list="satuan-suggest"
+                      className="w-full px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 uppercase"
+                    />
+                    <datalist id="satuan-suggest">
+                      <option value="UNIT" />
+                      <option value="PCS" />
+                      <option value="SET" />
+                      <option value="LOT" />
+                      <option value="PASANG" />
+                    </datalist>
+                  </div>
+                  <div className="sm:col-span-4">
+                    <label htmlFor="wo-merk" className="text-xs text-slate-500 font-medium block mb-1">Merk / Item</label>
+                    <input
+                      id="wo-merk" type="text"
+                      value={selectedWO.merk}
+                      onChange={e => setSelectedWO({ ...selectedWO, merk: e.target.value })}
+                      placeholder="ELEKTROMOTOR / DINAMO / dll"
+                      className="w-full px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
+                    />
+                  </div>
+                  <div className="sm:col-span-4">
+                    <label htmlFor="wo-deskripsi" className="text-xs text-slate-500 font-medium block mb-1">Deskripsi</label>
+                    <input
+                      id="wo-deskripsi" type="text"
+                      value={selectedWO.capacity}
+                      onChange={e => setSelectedWO({ ...selectedWO, capacity: e.target.value })}
+                      placeholder="Spesifikasi (mis. 5 KW / 7,5 HP)"
+                      className="w-full px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
+                    />
+                  </div>
+                </div>
+                {/* Preview */}
+                <div className="mt-3 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600">
+                  <span className="font-semibold">Preview cetak:</span>{' '}
+                  <span className="font-mono">{selectedWO.qty ?? 1} {selectedWO.qtySatuan || 'UNIT'} — {selectedWO.merk}{selectedWO.capacity && selectedWO.capacity !== '-' ? ` (${selectedWO.capacity})` : ''}</span>
+                </div>
+              </div>
+
               <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 flex flex-col gap-3">
                 <div className="flex justify-between items-center">
                   <h4 className="font-semibold text-slate-700">Tindakan Jasa</h4>

@@ -6,9 +6,14 @@ export interface WorkOrder {
   id: string;
   customer: string;
   merk: string;
+  /** Deskripsi/spesifikasi item (sebelumnya bernama "Kapasitas"). DB column: capacity. */
   capacity: string;
   keluhan: string;
   status: string;
+  /** Jumlah unit item utama untuk cetak SPK/Invoice/Surat Jalan. Default 1. */
+  qty?: number;
+  /** Satuan item utama (UNIT/PCS/SET/dll). Default "UNIT". */
+  qtySatuan?: string;
   technician: string;
   dateIn: string;
   estimasiSelesai: string;

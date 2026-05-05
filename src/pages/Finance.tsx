@@ -3,7 +3,7 @@ import { Plus, Trash2, Download, X, ChevronDown, FileText, BarChart2, BellRing, 
 import { useStore, computeStatusBayar, type FinanceTransaction } from '../store/useStore';
 import { exportBukuKas, exportLaporanBulanan, exportPiutang, exportLaporanLengkap } from '../lib/exportExcel';
 import { toast } from '../lib/toast';
-import { Button, DataHeader, DataCell, EmptyRow, EmptyState, StatCard, SearchInput, type SortDir } from '../components/ui';
+import { Button, DataHeader, DataCell, EmptyRow, EmptyState, StatCard, SearchInput, ActionMenu, type SortDir } from '../components/ui';
 import { confirm } from '../lib/confirm';
 import { fmt as fmtNumber } from '../lib/format';
 
@@ -660,19 +660,37 @@ export default function Finance() {
                             {runBal >= 0 ? '' : '− '}Rp {fmt(runBal)}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <button title="Hapus transaksi" aria-label="Hapus transaksi"
-                              onClick={async () => {
-                                const ok = await confirm({
-                                  title: 'Hapus transaksi?',
-                                  message: <>Transaksi <b>{trx.deskripsi}</b> ({trx.tanggal}, Rp {fmt(trx.nominal)}) akan dihapus permanen dari buku kas. Saldo berjalan akan dihitung ulang otomatis.</>,
+                            <ActionMenu
+                              ariaLabel={`Aksi untuk ${trx.id}`}
+                              actions={[
+                                trx.kategori === 'Pemasukan'
+                                  ? {
+                                      label: 'Cetak Kuitansi',
+                                      icon: Receipt,
+                                      onClick: () => window.open(`/print/kuitansi/${trx.id}`, '_blank'),
+                                    }
+                                  : {
+                                      label: 'Cetak Bukti Pembayaran',
+                                      icon: Printer,
+                                      onClick: () => window.open(`/print/bukti-pembayaran/${trx.id}`, '_blank'),
+                                    },
+                                {
+                                  label: 'Hapus transaksi',
+                                  icon: Trash2,
                                   destructive: true,
-                                  confirmLabel: 'Hapus transaksi',
-                                });
-                                if (ok) deleteFinance(trx.id);
-                              }}
-                              className="inline-flex items-center justify-center w-7 h-7 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                                  separator: true,
+                                  onClick: async () => {
+                                    const ok = await confirm({
+                                      title: 'Hapus transaksi?',
+                                      message: <>Transaksi <b>{trx.deskripsi}</b> ({trx.tanggal}, Rp {fmt(trx.nominal)}) akan dihapus permanen dari buku kas. Saldo berjalan akan dihitung ulang otomatis.</>,
+                                      destructive: true,
+                                      confirmLabel: 'Hapus transaksi',
+                                    });
+                                    if (ok) deleteFinance(trx.id);
+                                  },
+                                },
+                              ]}
+                            />
                           </td>
                         </tr>
                       );

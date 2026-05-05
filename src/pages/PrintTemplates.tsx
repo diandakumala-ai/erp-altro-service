@@ -1,10 +1,11 @@
 import { useParams } from 'react-router-dom';
 import { useStore, computeStatusBayar } from '../store/useStore';
 import { cityShort } from '../lib/format';
+import { terbilangRupiah } from '../lib/terbilang';
 
 const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(n);
 
-const VALID_TYPES = ['invoice', 'invoice-dp', 'invoice-pelunasan', 'spk', 'surat-jalan', 'laporan-keuangan'] as const;
+const VALID_TYPES = ['invoice', 'invoice-dp', 'invoice-pelunasan', 'spk', 'surat-jalan', 'laporan-keuangan', 'kuitansi', 'bukti-pembayaran'] as const;
 const VALID_ID = /^[A-Za-z0-9_-]{1,32}$/;
 const VALID_PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -258,6 +259,197 @@ export default function PrintTemplates() {
     );
   }
 
+  // ─── KUITANSI (Pemasukan) & BUKTI PEMBAYARAN (Pengeluaran) ───────────────
+  // Pakai ID dari tabel `finance`, bukan `work_orders`.
+  if (type === 'kuitansi' || type === 'bukti-pembayaran') {
+    const trx = finance.find(t => t.id === id);
+    if (!trx) {
+      return (
+        <div className="p-10 text-center">
+          <h2>Transaksi tidak ditemukan.</h2>
+          <button onClick={() => window.close()} className="mt-4 text-indigo-600 underline">Tutup tab ini</button>
+        </div>
+      );
+    }
+
+    const isKuitansi = type === 'kuitansi';
+    // Validasi: kuitansi hanya untuk Pemasukan, bukti pembayaran hanya Pengeluaran
+    if (isKuitansi && trx.kategori !== 'Pemasukan') {
+      return (
+        <div className="p-10 text-center">
+          <h2>Kuitansi hanya untuk transaksi Pemasukan.</h2>
+          <p className="text-sm text-slate-500 mt-2">Untuk Pengeluaran, gunakan Bukti Pembayaran.</p>
+          <button onClick={() => window.close()} className="mt-4 text-indigo-600 underline">Tutup tab ini</button>
+        </div>
+      );
+    }
+    if (!isKuitansi && trx.kategori !== 'Pengeluaran') {
+      return (
+        <div className="p-10 text-center">
+          <h2>Bukti Pembayaran hanya untuk transaksi Pengeluaran.</h2>
+          <p className="text-sm text-slate-500 mt-2">Untuk Pemasukan, gunakan Kuitansi.</p>
+          <button onClick={() => window.close()} className="mt-4 text-indigo-600 underline">Tutup tab ini</button>
+        </div>
+      );
+    }
+
+    const nominalAbs = Math.abs(trx.nominal);
+    const trxTanggal = trx.tanggal
+      ? new Date(trx.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+      : today;
+
+    // Ambil data WO terkait kalau trx ada woId — untuk konteks "untuk pembayaran apa"
+    const trxWo = trx.woId ? workOrders.find(w => w.id === trx.woId) : undefined;
+
+    // Header & label kontekstual
+    const titleMap = {
+      kuitansi: 'KUITANSI',
+      'bukti-pembayaran': 'BUKTI PEMBAYARAN',
+    } as const;
+    const headerTitle = titleMap[type];
+    const idPrefix = isKuitansi ? 'KW' : 'BP';
+    const docNo = trx.id.replace(/^TRX-?0*/, `${idPrefix}-`);
+
+    // Sub-kategori → label "untuk keperluan"
+    const keperluanLabel = (() => {
+      const sk = trx.subKategori;
+      if (isKuitansi) {
+        if (sk === 'DP') return `Pembayaran DP${trxWo ? ` Work Order ${trxWo.id}` : ''}`;
+        if (sk === 'Pelunasan') return `Pelunasan${trxWo ? ` Work Order ${trxWo.id}` : ''}`;
+        if (sk === 'Pembayaran Servis') return `Pembayaran Servis${trxWo ? ` Work Order ${trxWo.id}` : ''}`;
+        return trx.deskripsi;
+      } else {
+        if (sk === 'Material/Suku Cadang') return `Pembelian ${trx.deskripsi}`;
+        if (sk === 'Listrik & Operasional') return `Pembayaran Operasional: ${trx.deskripsi}`;
+        if (sk === 'Gaji Teknisi') return `Pembayaran Gaji: ${trx.deskripsi}`;
+        return trx.deskripsi;
+      }
+    })();
+
+    // Untuk kuitansi: dari = pelanggan/pihak luar (bs); untuk bukti pembayaran: dari = bs, ke = trx pihak
+    return (
+      <div className="min-h-screen bg-slate-200 print:bg-white">
+        <style>{`
+          @media print {
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            body { background: white !important; margin: 0; padding: 0; }
+            @page { size: A5 landscape; margin: 0.8cm; }
+            .no-print { display: none !important; }
+          }
+        `}</style>
+
+        {/* Action Bar */}
+        <div className="no-print sticky top-0 left-0 right-0 bg-slate-800 text-white p-3 flex justify-between items-center z-50 shadow-md">
+          <div>
+            <h2 className="font-semibold text-base">Preview {headerTitle} · {docNo}</h2>
+            <p className="text-xs text-slate-300">Kertas ½ A4 (A5 Landscape) · Horizontal · Margin 0.8 cm</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => window.close()} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium">Tutup</button>
+            <button onClick={() => window.print()} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium flex items-center gap-2">
+              🖨️ Cetak / PDF
+            </button>
+          </div>
+        </div>
+
+        {/* Halaman A5 Landscape */}
+        <div className="bg-white text-black px-7 py-5 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none text-sm">
+
+          {/* Header */}
+          <div className="flex justify-between items-start mb-4 border-b-2 border-black pb-3">
+            <div className="flex items-start gap-3">
+              <img
+                src={bs.logoUrl || '/primary-logo.png'}
+                alt="Logo"
+                className="h-14 w-auto object-contain object-left"
+                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+              <div>
+                <h1 className="text-base font-bold font-serif tracking-wide leading-tight">{bs.namaBengkel}</h1>
+                <p className="text-2xs mt-0.5 font-semibold">{bs.alamat}{bs.kota ? `, ${bs.kota}` : ''}</p>
+                <p className="text-2xs">
+                  {bs.telepon && `Telp: ${bs.telepon}`}
+                  {bs.telepon && bs.hp && ' | '}
+                  {bs.hp && `HP: ${bs.hp}`}
+                </p>
+                {bs.email && <p className="text-2xs">Email: {bs.email}</p>}
+              </div>
+            </div>
+            <div className="text-right">
+              <h2 className={`text-lg font-bold uppercase mb-1 tracking-widest ${isKuitansi ? 'text-emerald-700' : 'text-indigo-700'}`}>{headerTitle}</h2>
+              <p className="text-xs">No.: <span className="font-semibold">{docNo}</span></p>
+              <p className="text-xs">{cityShort(bs.kota) || 'Pekanbaru'}, {trxTanggal}</p>
+            </div>
+          </div>
+
+          {/* Body */}
+          <div className="px-2 py-3 space-y-2.5 text-sm">
+            {/* Telah terima dari / Telah dibayarkan kepada */}
+            <div className="grid grid-cols-[140px_1fr] gap-2 items-baseline">
+              <span className="text-slate-600">{isKuitansi ? 'Telah terima dari' : 'Telah dibayarkan kepada'}</span>
+              <span className="font-bold border-b border-dotted border-slate-400 pb-0.5">
+                : {isKuitansi ? (trxWo?.customer || trx.deskripsi.replace(/^(Pelunasan|Pembayaran DP) - [\w-]+ \(/, '').replace(/\)$/, '') || '─') : trx.deskripsi}
+              </span>
+            </div>
+
+            {/* Banyaknya uang (terbilang) */}
+            <div className="grid grid-cols-[140px_1fr] gap-2 items-baseline">
+              <span className="text-slate-600">Banyaknya uang</span>
+              <span className="italic font-semibold border-b border-dotted border-slate-400 pb-0.5">
+                : {terbilangRupiah(nominalAbs)}
+              </span>
+            </div>
+
+            {/* Untuk pembayaran / keperluan */}
+            <div className="grid grid-cols-[140px_1fr] gap-2 items-baseline">
+              <span className="text-slate-600">{isKuitansi ? 'Untuk pembayaran' : 'Untuk keperluan'}</span>
+              <span className="font-medium border-b border-dotted border-slate-400 pb-0.5">
+                : {keperluanLabel}
+              </span>
+            </div>
+
+            {/* Cara bayar (kalau ada catatan) */}
+            {trx.catatan && (
+              <div className="grid grid-cols-[140px_1fr] gap-2 items-baseline">
+                <span className="text-slate-600">Catatan</span>
+                <span className="text-slate-700">: {trx.catatan}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Nominal box + Tanda tangan */}
+          <div className="flex justify-between items-end mt-6 px-2">
+            {/* Nominal box besar — kiri */}
+            <div className={`border-2 ${isKuitansi ? 'border-emerald-700' : 'border-indigo-700'} rounded-lg px-5 py-3 inline-block`}>
+              <p className="text-2xs font-semibold uppercase tracking-wider text-slate-500">Jumlah</p>
+              <p className={`text-2xl font-black font-mono ${isKuitansi ? 'text-emerald-700' : 'text-indigo-700'}`}>
+                Rp {fmt(nominalAbs)},-
+              </p>
+            </div>
+
+            {/* Tanda tangan kanan */}
+            <div className="text-center w-52">
+              <p className="text-xs">{cityShort(bs.kota) || 'Pekanbaru'}, {trxTanggal}</p>
+              <p className="text-xs mt-0.5">{isKuitansi ? 'Yang menerima,' : 'Yang membayarkan,'}</p>
+              <div className="h-16 mt-1"></div>
+              <div className="border-t border-slate-700 pt-1">
+                <p className="text-sm font-bold">{bs.namaPemilik || bs.namaBengkel}</p>
+                <p className="text-2xs text-slate-500">{bs.jabatanPemilik || 'Bagian Keuangan'}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Footnote */}
+          <div className="mt-6 pt-2 border-t border-dashed border-slate-300 text-2xs text-slate-400 italic text-center">
+            {isKuitansi
+              ? 'Kuitansi ini sah sebagai bukti penerimaan pembayaran.'
+              : 'Bukti pembayaran ini diterbitkan sebagai dokumen pencatatan pengeluaran internal.'}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Untuk semua tipe lainnya (invoice, spk, surat-jalan), butuh `wo`.
   if (!wo) {
     return (
@@ -436,8 +628,8 @@ export default function PrintTemplates() {
               {/* Main Item */}
               <tr>
                 <td className="py-1 px-2 border-r border-black text-center">1.</td>
-                <td className="py-1 px-2 border-r border-black text-center">1 UNIT</td>
-                <td className="py-1 px-2 border-r border-black font-semibold">{wo.merk}</td>
+                <td className="py-1 px-2 border-r border-black text-center">{wo.qty ?? 1} {wo.qtySatuan || 'UNIT'}</td>
+                <td className="py-1 px-2 border-r border-black font-semibold">{wo.merk}{wo.capacity && wo.capacity !== '-' ? ` (${wo.capacity})` : ''}</td>
                 <td className="py-1 px-2 border-r border-black text-right"></td>
                 <td className="py-1 px-2 text-right"></td>
               </tr>
@@ -652,8 +844,9 @@ export default function PrintTemplates() {
           {/* Detail Barang */}
           <div className="mb-4 border border-black p-3">
             <h2 className="font-bold mb-1.5 text-sm">Detail Barang:</h2>
-            <p className="text-sm"><strong>Merk / Jenis:</strong> {wo.merk}</p>
-            <p className="mt-1 text-sm"><strong>Kapasitas:</strong> {wo.capacity}</p>
+            <p className="text-sm"><strong>Qty:</strong> {wo.qty ?? 1} {wo.qtySatuan || 'UNIT'}</p>
+            <p className="mt-1 text-sm"><strong>Merk / Jenis:</strong> {wo.merk}</p>
+            <p className="mt-1 text-sm"><strong>Deskripsi:</strong> {wo.capacity}</p>
             <p className="mt-1 text-sm"><strong>Keluhan / Kondisi:</strong> {wo.keluhan}</p>
           </div>
 
@@ -780,8 +973,8 @@ export default function PrintTemplates() {
             <tbody>
               <tr>
                 <td className="py-2 px-2 border-r border-black text-center">1</td>
-                <td className="py-2 px-2 border-r border-black text-center">1 UNIT</td>
-                <td className="py-2 px-2 border-r border-black font-semibold">{wo.merk} (Kap: {wo.capacity})</td>
+                <td className="py-2 px-2 border-r border-black text-center">{wo.qty ?? 1} {wo.qtySatuan || 'UNIT'}</td>
+                <td className="py-2 px-2 border-r border-black font-semibold">{wo.merk}{wo.capacity && wo.capacity !== '-' ? ` (${wo.capacity})` : ''}</td>
                 <td className="py-2 px-2 text-xs">Selesai Servis (Ref: {wo.id})</td>
               </tr>
               {/* Filler */}
