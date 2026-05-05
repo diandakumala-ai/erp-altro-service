@@ -3,7 +3,7 @@ import { useStore, computeStatusBayar } from '../store/useStore';
 
 const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(n);
 
-const VALID_TYPES = ['invoice', 'spk', 'surat-jalan', 'laporan-keuangan'] as const;
+const VALID_TYPES = ['invoice', 'invoice-dp', 'invoice-pelunasan', 'spk', 'surat-jalan', 'laporan-keuangan'] as const;
 const VALID_ID = /^[A-Za-z0-9_-]{1,32}$/;
 const VALID_PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -268,12 +268,46 @@ export default function PrintTemplates() {
   }
 
   // ─── INVOICE (½ A4 landscape / A5 landscape) ────────────────────────────
-  if (type === 'invoice') {
+  // Tiga variant: 'invoice' (full), 'invoice-dp', 'invoice-pelunasan'
+  if (type === 'invoice' || type === 'invoice-dp' || type === 'invoice-pelunasan') {
     const diskon = wo.diskon ?? 0;
     const grandTotal = Math.max(subtotal - diskon, 0);
+    const dpAmount = wo.dpAmount ?? 0;
     const piutang = computeStatusBayar(wo, finance);
     const fmtTanggalLong = (iso?: string | null) =>
       iso ? new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
+
+    // Variant config — title, jumlah yang ditagih, label
+    const variant = type === 'invoice-dp' ? 'dp' : type === 'invoice-pelunasan' ? 'pelunasan' : 'full';
+    const sisaPelunasan = Math.max(grandTotal - dpAmount, 0);
+
+    // Total yang ditagih invoice ini
+    const tagihIni =
+      variant === 'dp' ? dpAmount :
+      variant === 'pelunasan' ? sisaPelunasan :
+      grandTotal;
+
+    const headerTitle =
+      variant === 'dp' ? 'INVOICE DP' :
+      variant === 'pelunasan' ? 'INVOICE PELUNASAN' :
+      'INVOICE';
+
+    const idPrefix =
+      variant === 'dp' ? 'DP' :
+      variant === 'pelunasan' ? 'LNS' :
+      'INV';
+    const invoiceNo = wo.id.replace('WO-', `${idPrefix}-`);
+
+    // Guard: variant DP/Pelunasan butuh dpAmount > 0
+    if (variant !== 'full' && dpAmount === 0) {
+      return (
+        <div className="p-10 text-center">
+          <h2 className="text-lg font-bold mb-2">Invoice {variant === 'dp' ? 'DP' : 'Pelunasan'} tidak tersedia</h2>
+          <p className="text-slate-500 mb-4">WO ini di-set <b>Bayar Penuh</b> (tanpa DP). Gunakan Invoice biasa.</p>
+          <button onClick={() => window.close()} className="mt-2 text-indigo-600 underline">Tutup tab ini</button>
+        </div>
+      );
+    }
 
     return (
       <div className="min-h-screen bg-slate-200 print:bg-white">
@@ -309,7 +343,7 @@ export default function PrintTemplates() {
         {/* Action Bar */}
         <div className="no-print sticky top-0 left-0 right-0 bg-slate-800 text-white p-3 flex justify-between items-center z-50 shadow-md">
           <div>
-            <h2 className="font-semibold text-base">Preview Invoice · {wo.id.replace('WO-', 'INV-')}</h2>
+            <h2 className="font-semibold text-base">Preview {headerTitle} · {invoiceNo}</h2>
             <p className="text-xs text-slate-300">Kertas ½ A4 (A5 Landscape) · Horizontal · Margin 0.8 cm</p>
           </div>
           <div className="flex gap-2">
@@ -353,11 +387,14 @@ export default function PrintTemplates() {
               </div>
             </div>
             <div className="text-right text-xs">
-              <p className="font-bold text-base uppercase tracking-wide border-b border-black pb-1 mb-2">INVOICE</p>
+              <p className={`font-bold text-base uppercase tracking-wide border-b border-black pb-1 mb-2 ${variant === 'dp' ? 'text-emerald-700' : variant === 'pelunasan' ? 'text-amber-700' : ''}`}>{headerTitle}</p>
               <p>{bs.kota || 'Pekanbaru'}, {today}</p>
               <p className="mt-1">Kepada Yth,</p>
               <p className="font-bold text-sm">{wo.customer}</p>
-              <p className="mt-1">No.: <span className="font-semibold">{wo.id.replace('WO-', 'INV-')}</span></p>
+              <p className="mt-1">No.: <span className="font-semibold">{invoiceNo}</span></p>
+              {variant !== 'full' && (
+                <p className="text-2xs text-slate-500 mt-0.5">Ref WO: {wo.id}</p>
+              )}
               {/* Termin Pembayaran info — di bawah no invoice */}
               <div className="mt-1.5 inline-block bg-slate-100 border border-slate-300 rounded px-2 py-1 text-2xs leading-tight">
                 <span className="font-semibold">Termin: </span>
@@ -433,34 +470,78 @@ export default function PrintTemplates() {
               </tr>
             </tbody>
             <tfoot>
-              {/* Pembayaran + Jumlah */}
-              <tr className="border-t border-black">
-                <td colSpan={3} className="py-1.5 px-2 border-r border-black align-top text-2xs" rowSpan={diskon > 0 ? 3 : 2}>
-                  <p className="font-semibold mb-0.5">Pembayaran dapat ditransfer ke:</p>
-                  <p>BANK MANDIRI A/N SUWALDI</p>
-                  <p>No.Rek 108-00-1007188-5</p>
-                  <p className="mt-0.5">BANK BCA A/N AZWA ADITYA MAULANA</p>
-                  <p>No.Rek 8230531308</p>
-                </td>
-                <td className="py-1 px-2 border-r border-black border-b border-black text-right font-semibold">Subtotal</td>
-                <td className="py-1 px-2 border-b border-black text-right font-semibold">{fmt(subtotal)}</td>
-              </tr>
-              {/* Diskon — tampil hanya jika ada */}
-              {diskon > 0 && (
-                <tr>
-                  <td className="py-1 px-2 border-r border-black border-b border-black text-right font-semibold text-red-700">
-                    Diskon{subtotal > 0 ? ` (${((diskon / subtotal) * 100).toFixed(1)}%)` : ''}
-                  </td>
-                  <td className="py-1 px-2 border-b border-black text-right font-semibold text-red-700">
-                    - {fmt(diskon)}
-                  </td>
-                </tr>
-              )}
-              {/* Total */}
-              <tr>
-                <td className="py-1.5 px-2 border-r border-black text-right font-bold text-sm">Total</td>
-                <td className="py-1.5 px-2 text-right font-bold text-sm">{fmt(grandTotal)}</td>
-              </tr>
+              {(() => {
+                // Hitung jumlah baris footer (untuk rowSpan info bank)
+                const showDiskon = diskon > 0;
+                const showDpRow = variant !== 'full' && dpAmount > 0;
+                // Subtotal + (Diskon?) + (DP/Sisa?) + Total = 2 + n
+                const footerRows = 2 + (showDiskon ? 1 : 0) + (showDpRow ? 1 : 0);
+                return (
+                  <>
+                    {/* Pembayaran + Subtotal */}
+                    <tr className="border-t border-black">
+                      <td colSpan={3} className="py-1.5 px-2 border-r border-black align-top text-2xs" rowSpan={footerRows}>
+                        <p className="font-semibold mb-0.5">Pembayaran dapat ditransfer ke:</p>
+                        <p>BANK MANDIRI A/N SUWALDI</p>
+                        <p>No.Rek 108-00-1007188-5</p>
+                        <p className="mt-0.5">BANK BCA A/N AZWA ADITYA MAULANA</p>
+                        <p>No.Rek 8230531308</p>
+                        {variant === 'pelunasan' && (
+                          <p className="mt-1.5 text-2xs italic text-slate-600">
+                            * DP sebesar Rp {fmt(dpAmount)} sudah dibayarkan sebelumnya. Invoice ini hanya menagih sisa pelunasan.
+                          </p>
+                        )}
+                        {variant === 'dp' && (
+                          <p className="mt-1.5 text-2xs italic text-slate-600">
+                            * Invoice DP. Sisa pelunasan Rp {fmt(sisaPelunasan)} akan ditagih dalam invoice terpisah.
+                          </p>
+                        )}
+                      </td>
+                      <td className="py-1 px-2 border-r border-black border-b border-black text-right font-semibold">Subtotal</td>
+                      <td className="py-1 px-2 border-b border-black text-right font-semibold">{fmt(subtotal)}</td>
+                    </tr>
+                    {/* Diskon — tampil hanya jika ada */}
+                    {showDiskon && (
+                      <tr>
+                        <td className="py-1 px-2 border-r border-black border-b border-black text-right font-semibold text-red-700">
+                          Diskon{subtotal > 0 ? ` (${((diskon / subtotal) * 100).toFixed(1)}%)` : ''}
+                        </td>
+                        <td className="py-1 px-2 border-b border-black text-right font-semibold text-red-700">
+                          - {fmt(diskon)}
+                        </td>
+                      </tr>
+                    )}
+                    {/* DP info row — hanya invoice-dp atau invoice-pelunasan */}
+                    {showDpRow && variant === 'dp' && (
+                      <tr>
+                        <td className="py-1 px-2 border-r border-black border-b border-black text-right font-semibold text-emerald-700">
+                          Total Tagihan WO
+                        </td>
+                        <td className="py-1 px-2 border-b border-black text-right text-slate-600">
+                          {fmt(grandTotal)}
+                        </td>
+                      </tr>
+                    )}
+                    {showDpRow && variant === 'pelunasan' && (
+                      <tr>
+                        <td className="py-1 px-2 border-r border-black border-b border-black text-right font-semibold text-emerald-700">
+                          DP Sudah Dibayar
+                        </td>
+                        <td className="py-1 px-2 border-b border-black text-right text-emerald-700">
+                          - {fmt(dpAmount)}
+                        </td>
+                      </tr>
+                    )}
+                    {/* Total / Tagihan invoice ini */}
+                    <tr>
+                      <td className={`py-1.5 px-2 border-r border-black text-right font-bold text-sm ${variant !== 'full' ? 'bg-slate-50' : ''}`}>
+                        {variant === 'dp' ? 'DP DITAGIH' : variant === 'pelunasan' ? 'SISA PELUNASAN' : 'Total'}
+                      </td>
+                      <td className={`py-1.5 px-2 text-right font-bold text-sm ${variant !== 'full' ? 'bg-slate-50' : ''}`}>{fmt(tagihIni)}</td>
+                    </tr>
+                  </>
+                );
+              })()}
             </tfoot>
           </table>
 

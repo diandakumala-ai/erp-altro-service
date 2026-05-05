@@ -22,6 +22,15 @@ export interface WorkOrder {
    * saat re-print. NULL = belum terbit invoice.
    */
   tanggalInvoice?: string;
+  /**
+   * Rencana DP (Rp). 0 = bayar penuh tanpa DP. BUKAN pembayaran aktual —
+   * pembayaran aktual dicatat di tabel `finance` dengan `subKategori = 'DP'`
+   * atau `'Pelunasan'`. Field ini hanya rencana yang dipakai sebagai default
+   * di Finance suggestion + invoice DP.
+   *
+   * Sisa pelunasan = (estimatedCost - diskon) - dpAmount.
+   */
+  dpAmount?: number;
 }
 
 export interface InventoryItem {
@@ -781,7 +790,7 @@ export const useStore = create<AppState>((set) => ({
           id: `TRX-${String(maxId + 1).padStart(4, '0')}`,
           tanggal: new Date().toISOString().split('T')[0],
           kategori: 'Pemasukan',
-          subKategori: 'Pembayaran Servis',
+          subKategori: 'Pelunasan',
           deskripsi: `Pelunasan - ${finalWo.id} (${finalWo.customer})`,
           nominal: finalWo.estimatedCost,
           woId: finalWo.id,    // Phase 5: link FK eksplisit

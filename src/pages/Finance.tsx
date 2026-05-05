@@ -46,9 +46,9 @@ function KategoriCell({ value, onSave }: { value: string; onSave: (v: string) =>
 
 function SubKategoriCell({ value, onSave, kategori }: { value: string; onSave: (v: string) => void; kategori: string }) {
   const [editing, setEditing] = useState(false);
-  
-  const options = kategori === 'Pemasukan' 
-    ? ['Pembayaran Servis', 'DP', 'Lain-lain']
+
+  const options = kategori === 'Pemasukan'
+    ? ['DP', 'Pelunasan', 'Lain-lain']
     : ['Material/Suku Cadang', 'Listrik & Operasional', 'Gaji Teknisi', 'Lain-lain'];
 
   return editing ? (
@@ -65,10 +65,12 @@ function SubKategoriCell({ value, onSave, kategori }: { value: string; onSave: (
   );
 }
 
-function DeskripsiCell({ value, onSave, onFill, kategori }: {
+function DeskripsiCell({ value, onSave, onFill, kategori, subKategori }: {
   value: string; onSave: (v: string) => void;
   onFill: (label: string, nominal: number, woId?: string) => void;
   kategori: string;
+  /** Filter suggestion berdasarkan sub-kategori (DP / Pelunasan / Lain-lain). */
+  subKategori?: string;
 }) {
   const workOrders = useStore(s => s.workOrders);
   const finance = useStore(s => s.finance);
@@ -78,21 +80,53 @@ function DeskripsiCell({ value, onSave, onFill, kategori }: {
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Helper: total bayar untuk WO (link via woId atau substring legacy)
+  const sumBayarForWo = (woId: string, filterSub?: 'DP') =>
+    finance
+      .filter(f =>
+        f.kategori === 'Pemasukan' && f.nominal > 0 &&
+        (f.woId === woId || (!f.woId && f.deskripsi.includes(woId))) &&
+        (filterSub === undefined || f.subKategori === filterSub || (filterSub === 'DP' && !f.subKategori && f.deskripsi.includes('Pembayaran DP')))
+      )
+      .reduce((sum, f) => sum + f.nominal, 0);
+
+  /**
+   * Build suggestions berdasarkan subKategori:
+   * - 'DP' → hanya WO yang BELUM punya DP atau pembayaran apapun
+   * - 'Pelunasan' → hanya WO yang belum lunas (status DP atau Belum Bayar)
+   * - undefined / 'Lain-lain' → tampilkan semua (legacy behavior)
+   */
   const suggestionsPemasukan = kategori === 'Pemasukan'
     ? workOrders.flatMap(wo => {
-        // Tagihan efektif = estimatedCost dikurangi diskon
         const effectiveTotal = Math.max((wo.estimatedCost || 0) - (wo.diskon || 0), 0);
-        // Hitung DP paid pakai woId dulu (post-migrasi), fallback ke substring match
-        const dpPaid = finance
-          .filter(f =>
-            f.kategori === 'Pemasukan' && f.nominal > 0 &&
-            (f.subKategori === 'DP' || f.deskripsi.includes('Pembayaran DP')) &&
-            (f.woId === wo.id || (!f.woId && f.deskripsi.includes(wo.id)))
-          )
-          .reduce((sum, f) => sum + f.nominal, 0);
-        const remaining = Math.max(effectiveTotal - dpPaid, 0);
+        if (effectiveTotal === 0) return [];
+        const dpPaid = sumBayarForWo(wo.id, 'DP');
+        const totalPaid = sumBayarForWo(wo.id);
+        const remaining = Math.max(effectiveTotal - totalPaid, 0);
+
+        // Suggestion DP — pakai dpAmount yang direncanakan, fallback 50%
+        const dpSuggested = (wo.dpAmount ?? 0) > 0 ? wo.dpAmount! : Math.round(effectiveTotal * 0.5);
+
+        // FILTER SMART per sub-kategori
+        if (subKategori === 'DP') {
+          // Skip WO yang sudah ada DP-nya
+          if (dpPaid > 0) return [];
+          // Skip WO yang sudah ada pembayaran apapun (sudah lunas/sudah pelunasan)
+          if (totalPaid >= effectiveTotal) return [];
+          return [
+            { label: `Pembayaran DP - ${wo.id} (${wo.customer})`, nominal: dpSuggested, type: 'dp' as const, woId: wo.id },
+          ];
+        }
+        if (subKategori === 'Pelunasan') {
+          // Skip WO yang sudah lunas
+          if (remaining === 0) return [];
+          return [
+            { label: `Pelunasan - ${wo.id} (${wo.customer})`, nominal: remaining, type: 'lunas' as const, woId: wo.id },
+          ];
+        }
+        // Default: tampilkan semua (untuk subKategori 'Lain-lain' atau belum di-set)
         return [
-          { label: `Pembayaran DP - ${wo.id} (${wo.customer})`, nominal: Math.round(effectiveTotal * 0.5), type: 'dp' as const, woId: wo.id },
+          { label: `Pembayaran DP - ${wo.id} (${wo.customer})`, nominal: dpSuggested, type: 'dp' as const, woId: wo.id },
           { label: `Pelunasan - ${wo.id} (${wo.customer})`, nominal: remaining, type: 'lunas' as const, woId: wo.id },
         ];
       })
@@ -141,10 +175,24 @@ function DeskripsiCell({ value, onSave, onFill, kategori }: {
         {showDropdown && (
           <div className="absolute left-0 top-6 bg-white border border-slate-200 rounded-lg shadow-xl w-80 max-h-64 overflow-y-auto" style={{ zIndex: 'var(--z-dropdown)' }}>
             <p className="px-3 py-1.5 text-2xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
-              {kategori === 'Pemasukan' ? 'Pilih dari Work Order' : 'Pilih dari Inventory'}
+              {kategori === 'Pemasukan'
+                ? subKategori === 'DP'
+                  ? 'WO yang Belum Bayar DP'
+                  : subKategori === 'Pelunasan'
+                  ? 'WO yang Belum Lunas'
+                  : 'Pilih dari Work Order'
+                : 'Pilih dari Inventory'}
             </p>
-            
-            {kategori === 'Pemasukan' && suggestionsPemasukan.length === 0 && <p className="px-3 py-3 text-xs text-slate-400">Tidak ada data.</p>}
+
+            {kategori === 'Pemasukan' && suggestionsPemasukan.length === 0 && (
+              <p className="px-3 py-3 text-xs text-slate-400 italic">
+                {subKategori === 'DP'
+                  ? 'Semua WO sudah ada DP / sudah dibayar.'
+                  : subKategori === 'Pelunasan'
+                  ? 'Semua WO sudah lunas.'
+                  : 'Tidak ada data.'}
+              </p>
+            )}
             {kategori === 'Pemasukan' && suggestionsPemasukan.map((s, idx) => (
               <button key={idx}
                 className="w-full text-left px-3 py-2.5 text-xs hover:bg-indigo-50 transition-colors border-b border-slate-50 last:border-0"
@@ -601,6 +649,7 @@ export default function Finance() {
                                 woId: woId ?? trx.woId,    // Phase 5: link FK kalau dari WO
                               })}
                               kategori={trx.kategori}
+                              subKategori={trx.subKategori}
                             />
                           </td>
                           <td className="px-4 py-3 text-slate-600 text-xs"><DataCell value={trx.catatan || ''} onSave={v => update(trx, 'catatan', v)} placeholder="Catatan opsional..." ariaLabel="Edit catatan" /></td>
@@ -940,7 +989,7 @@ export default function Finance() {
                                   id: newId,
                                   tanggal: new Date().toISOString().split('T')[0],
                                   kategori: 'Pemasukan',
-                                  subKategori: 'Pembayaran Servis',
+                                  subKategori: 'Pelunasan',
                                   deskripsi: `Pelunasan - ${wo.id} (${wo.customer})`,
                                   nominal: info.sisaTagihan,
                                   catatan: '',

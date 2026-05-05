@@ -29,6 +29,7 @@ const toDbWo = (w: WorkOrder) => ({
   diskon: w.diskon ?? 0,
   termin_hari: w.terminHari ?? 0,
   tanggal_invoice: w.tanggalInvoice || null,
+  dp_amount: w.dpAmount ?? 0,
 });
 
 const fromDbWo = (r: Record<string, unknown>): WorkOrder => ({
@@ -45,6 +46,7 @@ const fromDbWo = (r: Record<string, unknown>): WorkOrder => ({
   diskon: (r.diskon as number | null) ?? 0,
   terminHari: (r.termin_hari as number | null) ?? 0,
   tanggalInvoice: (r.tanggal_invoice as string | null) ?? undefined,
+  dpAmount: (r.dp_amount as number | null) ?? 0,
 });
 
 const toDbInv = (i: InventoryItem) => ({

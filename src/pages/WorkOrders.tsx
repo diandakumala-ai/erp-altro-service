@@ -258,12 +258,16 @@ export default function WorkOrders() {
     if (!selectedWO) return;
     const matCost = boms.filter(b => b.woId === selectedWO.id).reduce((a, b) => a + b.jumlah * b.harga, 0);
     const svcCost = services.filter(s => s.woId === selectedWO.id).reduce((a, s) => a + s.biaya, 0);
+    const newGrandTotal = Math.max((matCost + svcCost) - (selectedWO.diskon ?? 0), 0);
+    // Clamp dpAmount agar tidak melebihi grand total baru (mis. user kurangi material)
+    const clampedDp = Math.min(selectedWO.dpAmount ?? 0, newGrandTotal);
     updateWorkOrder({
       ...selectedWO,
       estimatedCost: matCost + svcCost,
       diskon: selectedWO.diskon ?? 0,
       terminHari: selectedWO.terminHari ?? 0,
       tanggalInvoice: selectedWO.tanggalInvoice,
+      dpAmount: clampedDp,
     });
     setSelectedWO(null);
   };
@@ -428,7 +432,12 @@ export default function WorkOrders() {
                         ariaLabel={`Aksi untuk ${wo.id}`}
                         actions={[
                           { label: 'Cetak SPK', icon: FileText, onClick: () => window.open(`/print/spk/${wo.id}`, '_blank') },
-                          { label: 'Cetak Invoice', icon: Printer, onClick: () => window.open(`/print/invoice/${wo.id}`, '_blank') },
+                          { label: 'Cetak Invoice (Full)', icon: Printer, onClick: () => window.open(`/print/invoice/${wo.id}`, '_blank') },
+                          // Invoice DP & Pelunasan hanya muncul kalau WO pakai DP
+                          ...((wo.dpAmount ?? 0) > 0 ? [
+                            { label: 'Cetak Invoice DP', icon: Printer, onClick: () => window.open(`/print/invoice-dp/${wo.id}`, '_blank') },
+                            { label: 'Cetak Invoice Pelunasan', icon: Printer, onClick: () => window.open(`/print/invoice-pelunasan/${wo.id}`, '_blank') },
+                          ] : []),
                           { label: 'Cetak Surat Jalan', icon: Truck, onClick: () => window.open(`/print/surat-jalan/${wo.id}`, '_blank') },
                           { label: 'Hapus WO', icon: Trash2, destructive: true, separator: true, onClick: async () => {
                             const ok = await confirm({
@@ -627,6 +636,139 @@ export default function WorkOrders() {
                   </div>
                 )}
               </div>
+
+              {/* Rencana Pembayaran (DP / Partial Payment) */}
+              {(() => {
+                const grandTotal = Math.max(selectedWO.estimatedCost - (selectedWO.diskon ?? 0), 0);
+                const dpAmount = selectedWO.dpAmount ?? 0;
+                const isPartial = dpAmount > 0;
+                const dpPct = grandTotal > 0 ? +((dpAmount / grandTotal) * 100).toFixed(2) : 0;
+                const sisaPelunasan = Math.max(grandTotal - dpAmount, 0);
+                return (
+                  <div className="bg-white border border-emerald-200 rounded-lg shadow-sm p-4">
+                    <div className="mb-3">
+                      <h4 className="font-semibold text-slate-700">Rencana Pembayaran</h4>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        <b>Bayar Penuh</b> = customer bayar 100% sekaligus.
+                        <b> Pakai DP</b> = customer bayar DP dulu, sisanya pelunasan terpisah.
+                        Ini hanya rencana — pembayaran aktual dicatat di halaman Finance.
+                      </p>
+                    </div>
+
+                    {/* Toggle penuh vs partial */}
+                    <div className="flex gap-1.5 mb-3">
+                      {([
+                        { v: false, label: 'Bayar Penuh' },
+                        { v: true,  label: 'Pakai DP (Partial)' },
+                      ] as const).map(opt => (
+                        <button
+                          key={String(opt.v)}
+                          type="button"
+                          onClick={() => {
+                            if (opt.v) {
+                              // Aktifkan DP — default 50% kalau belum ada
+                              if (dpAmount === 0 && grandTotal > 0) {
+                                setSelectedWO({ ...selectedWO, dpAmount: Math.round(grandTotal / 2) });
+                              }
+                            } else {
+                              // Matikan DP — set ke 0
+                              setSelectedWO({ ...selectedWO, dpAmount: 0 });
+                            }
+                          }}
+                          aria-pressed={isPartial === opt.v}
+                          className={`px-3 py-1.5 text-xs font-semibold rounded-lg border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 ${
+                            isPartial === opt.v
+                              ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
+                              : 'bg-white border-slate-200 text-slate-600 hover:border-emerald-300 hover:text-emerald-700'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Input DP — hanya saat partial */}
+                    {isPartial && (
+                      <>
+                        <div className="flex items-end gap-2">
+                          {/* Input Nominal Rp */}
+                          <div className="flex-1">
+                            <label htmlFor="dp-nominal" className="text-xs text-slate-500 font-medium block mb-1">DP Nominal (Rp)</label>
+                            <div className="flex items-center border border-slate-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-emerald-400">
+                              <span className="px-2.5 py-1.5 bg-slate-50 text-xs text-slate-500 border-r border-slate-300 font-medium">Rp</span>
+                              <input
+                                id="dp-nominal"
+                                type="number"
+                                min={0}
+                                max={grandTotal}
+                                value={dpAmount}
+                                onChange={e => {
+                                  const v = Math.max(0, Math.min(grandTotal, Number(e.target.value)));
+                                  setSelectedWO({ ...selectedWO, dpAmount: v });
+                                }}
+                                className="flex-1 px-3 py-1.5 text-sm text-right focus:outline-none min-w-0"
+                              />
+                            </div>
+                          </div>
+                          <div className="text-emerald-500 text-base font-bold pb-2 select-none" aria-hidden="true">⇄</div>
+                          {/* Input Persentase */}
+                          <div className="w-28">
+                            <label htmlFor="dp-pct" className="text-xs text-slate-500 font-medium block mb-1">DP (%)</label>
+                            <div className="flex items-center border border-slate-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-emerald-400">
+                              <input
+                                id="dp-pct"
+                                type="number"
+                                min={0}
+                                max={100}
+                                step={0.5}
+                                value={dpPct}
+                                onChange={e => {
+                                  const pct = Math.min(100, Math.max(0, Number(e.target.value)));
+                                  setSelectedWO({ ...selectedWO, dpAmount: Math.round(grandTotal * pct / 100) });
+                                }}
+                                className="flex-1 px-3 py-1.5 text-sm text-right focus:outline-none min-w-0 w-full"
+                              />
+                              <span className="px-2.5 py-1.5 bg-slate-50 text-xs text-slate-500 border-l border-slate-300 font-medium">%</span>
+                            </div>
+                          </div>
+                          {/* Quick preset */}
+                          <div className="flex flex-col gap-1 pb-1">
+                            <span className="text-tiny text-slate-400">Cepat</span>
+                            <div className="flex gap-1">
+                              {[30, 50, 70].map(p => (
+                                <button
+                                  key={p}
+                                  type="button"
+                                  onClick={() => setSelectedWO({ ...selectedWO, dpAmount: Math.round(grandTotal * p / 100) })}
+                                  className="px-1.5 py-0.5 text-2xs font-semibold border border-slate-200 rounded text-slate-600 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700 transition-colors"
+                                >
+                                  {p}%
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Summary breakdown */}
+                        <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                          <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                            <p className="text-tiny text-slate-500 font-semibold uppercase tracking-wider">Total Tagihan</p>
+                            <p className="text-sm font-bold text-slate-700">Rp {fmt(grandTotal)}</p>
+                          </div>
+                          <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                            <p className="text-tiny text-emerald-600 font-semibold uppercase tracking-wider">DP ({dpPct}%)</p>
+                            <p className="text-sm font-bold text-emerald-700">Rp {fmt(dpAmount)}</p>
+                          </div>
+                          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                            <p className="text-tiny text-amber-600 font-semibold uppercase tracking-wider">Sisa Pelunasan</p>
+                            <p className="text-sm font-bold text-amber-700">Rp {fmt(sisaPelunasan)}</p>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
 
           </div>
         </Dialog>
