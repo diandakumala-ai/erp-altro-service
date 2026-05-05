@@ -22,6 +22,17 @@ interface NotifItem {
   severity: Severity;
   /** Badge eksplisit (mis. "HABIS") opsional. */
   badge?: { text: string; tone: 'red' | 'amber' | 'slate' };
+  /** Numeric key for stable sorting (descending). Hindari parsing string. */
+  sortKey: number;
+}
+
+// ─── Local-tz today (FIX: hindari toISOString yang UTC-based) ────────────────
+function getLocalTodayISO(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 // ─── Snooze (localStorage 24h) ────────────────────────────────────────────────
@@ -79,13 +90,18 @@ function NotifRow({ item, onSnooze, onClose }: {
 }) {
   const Icon = TYPE_ICON[item.type];
   const iconColor = TYPE_ICON_COLOR[item.type];
+  // Severity sebagai border kiri — lebih kentara dari dot 1.5px, tetap ringan
+  const severityBar = item.severity === 'high'
+    ? 'border-l-2 border-l-red-400'
+    : 'border-l-2 border-l-amber-300';
 
   return (
-    <div className="group flex items-start gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0 relative">
+    <div className={`group flex items-start gap-3 pl-3 pr-2 py-2.5 hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0 relative ${severityBar}`}>
       <Link
         to={item.to}
         onClick={onClose}
-        className="flex items-start gap-3 flex-1 min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 rounded -mx-1 px-1"
+        aria-label={`${item.severity === 'high' ? 'Prioritas tinggi: ' : ''}${item.title}. ${item.desc}`}
+        className="flex items-start gap-3 flex-1 min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 rounded -mx-1 px-1 pr-7"
       >
         {/* Icon */}
         <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${iconColor}`} aria-hidden="true">
@@ -103,19 +119,14 @@ function NotifRow({ item, onSnooze, onClose }: {
           </div>
           <p className="text-xs text-slate-500 leading-snug mt-0.5 line-clamp-2">{item.desc}</p>
         </div>
-        {/* Severity dot */}
-        <div
-          className={`w-1.5 h-1.5 rounded-full shrink-0 mt-1.5 ${item.severity === 'high' ? 'bg-red-500' : 'bg-amber-400'}`}
-          aria-label={item.severity === 'high' ? 'prioritas tinggi' : 'prioritas medium'}
-        />
       </Link>
-      {/* Snooze button — visible on hover/focus */}
+      {/* Snooze button — semi-visible on idle (mobile-friendly), full on hover/focus */}
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); onSnooze(item.id); }}
         title="Tunda 24 jam"
         aria-label={`Tunda notifikasi "${item.title}" selama 24 jam`}
-        className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
+        className="absolute right-1.5 top-2 opacity-40 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
       >
         <BellOff className="w-3 h-3" />
       </button>
@@ -125,7 +136,7 @@ function NotifRow({ item, onSnooze, onClose }: {
 
 // ─── Section ─────────────────────────────────────────────────────────────────
 function NotifSection({
-  label, icon: Icon, color, items, hiddenCount, onSnooze, onClose,
+  label, icon: Icon, color, items, hiddenCount, viewAllTo, onSnooze, onClose,
 }: {
   label: string;
   icon: React.ElementType;
@@ -133,6 +144,8 @@ function NotifSection({
   items: NotifItem[];
   /** Item ekstra yang ter-cap karena slice. */
   hiddenCount: number;
+  /** Link "lihat semua" — navigasi ke halaman terkait. */
+  viewAllTo: string;
   onSnooze: (id: string) => void;
   onClose: () => void;
 }) {
@@ -150,9 +163,13 @@ function NotifSection({
         <NotifRow key={n.id} item={n} onSnooze={onSnooze} onClose={onClose} />
       ))}
       {hiddenCount > 0 && (
-        <div className="px-4 py-1.5 bg-slate-50 text-xs text-slate-500 text-center border-b border-slate-100">
-          +{hiddenCount} lainnya · buka halaman terkait untuk melihat semua
-        </div>
+        <Link
+          to={viewAllTo}
+          onClick={onClose}
+          className="flex items-center justify-center gap-1 px-4 py-1.5 bg-slate-50 hover:bg-slate-100 text-xs text-indigo-600 hover:text-indigo-800 font-medium border-b border-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 transition-colors"
+        >
+          +{hiddenCount} lainnya · lihat semua →
+        </Link>
       )}
     </div>
   );
@@ -160,10 +177,10 @@ function NotifSection({
 
 // ─── Helper: today yang refresh otomatis ──────────────────────────────────────
 function useTodayISO(): string {
-  const [today, setToday] = useState(() => new Date().toISOString().slice(0, 10));
+  const [today, setToday] = useState(getLocalTodayISO);
   useEffect(() => {
     const tick = () => {
-      const next = new Date().toISOString().slice(0, 10);
+      const next = getLocalTodayISO();
       setToday(prev => (prev !== next ? next : prev));
     };
     // Refresh saat tab kembali aktif (kalau lewat tengah malam saat idle)
@@ -195,11 +212,14 @@ export function NotificationBell() {
 
   // Snooze state — disimpan di localStorage, di-prune saat dimuat
   const [snoozeMap, setSnoozeMap] = useState<SnoozeMap>(loadSnooze);
+  // Functional updater hindari stale closure saat user snooze beberapa item beruntun
   const snooze = useCallback((id: string) => {
-    const next = { ...snoozeMap, [id]: Date.now() + SNOOZE_DURATION_MS };
-    setSnoozeMap(next);
-    saveSnooze(next);
-  }, [snoozeMap]);
+    setSnoozeMap(prev => {
+      const next = { ...prev, [id]: Date.now() + SNOOZE_DURATION_MS };
+      saveSnooze(next);
+      return next;
+    });
+  }, []);
   const resetSnooze = useCallback(() => {
     setSnoozeMap({});
     saveSnooze({});
@@ -223,19 +243,18 @@ export function NotificationBell() {
           desc: `${w.customer} · terlambat ${days} hari (est. ${w.estimasiSelesai})`,
           to: '/work-orders',
           severity: (days >= 7 ? 'high' : 'medium') as Severity,
+          sortKey: days, // makin lama makin atas
         };
       })
-      .sort((a, b) => {
-        const aDays = parseInt(a.desc.match(/terlambat (\d+)/)?.[1] ?? '0', 10);
-        const bDays = parseInt(b.desc.match(/terlambat (\d+)/)?.[1] ?? '0', 10);
-        return bDays - aDays;
-      });
+      .sort((a, b) => b.sortKey - a.sortKey);
 
     // Stok kritis
     const stokAll: NotifItem[] = inventory
       .filter(i => i.stok <= i.batasMinimum)
       .map(i => {
         const isHabis = i.stok === 0;
+        // Defisit: minimum - stok. Habis dapat boost agar selalu di atas.
+        const deficit = Math.max(i.batasMinimum - i.stok, 0);
         return {
           id: `stok-${i.id}`,
           type: 'stok' as const,
@@ -246,9 +265,10 @@ export function NotificationBell() {
           to: '/inventory',
           severity: (isHabis ? 'high' : 'medium') as Severity,
           badge: isHabis ? { text: 'Habis', tone: 'red' as const } : undefined,
+          sortKey: isHabis ? 1_000_000 + deficit : deficit,
         };
       })
-      .sort((a, b) => (a.severity === 'high' ? 0 : 1) - (b.severity === 'high' ? 0 : 1));
+      .sort((a, b) => b.sortKey - a.sortKey);
 
     // Piutang — hitung sekali, kategorikan
     const piutangAll = workOrders
@@ -271,13 +291,10 @@ export function NotificationBell() {
           badge: lewat >= 30
             ? { text: `${lewat}h`, tone: 'red' as const }
             : undefined,
+          sortKey: lewat,
         };
       })
-      .sort((a, b) => {
-        const aDays = parseInt(a.desc.match(/(\d+) hari/)?.[1] ?? '0', 10);
-        const bDays = parseInt(b.desc.match(/(\d+) hari/)?.[1] ?? '0', 10);
-        return bDays - aDays;
-      });
+      .sort((a, b) => b.sortKey - a.sortKey);
 
     // Bucket: AKAN jatuh tempo dalam 3 hari (bukan overdue)
     const akanJatuhTempoAll: NotifItem[] = piutangAll
@@ -291,13 +308,10 @@ export function NotificationBell() {
           : `${info.hariKeJatuhTempo} hari lagi · sisa Rp ${fmt(info.sisaTagihan)}`,
         to: '/finance',
         severity: (info.hariKeJatuhTempo === 0 ? 'high' : 'medium') as Severity,
+        // Negate hari karena sort descending — paling dekat (0/1) di atas
+        sortKey: -(info.hariKeJatuhTempo ?? 99),
       }))
-      // Sort by hari ascending (paling dekat dulu)
-      .sort((a, b) => {
-        const aDays = a.desc.startsWith('Jatuh tempo HARI INI') ? 0 : parseInt(a.desc.match(/(\d+) hari/)?.[1] ?? '99', 10);
-        const bDays = b.desc.startsWith('Jatuh tempo HARI INI') ? 0 : parseInt(b.desc.match(/(\d+) hari/)?.[1] ?? '99', 10);
-        return aDays - bDays;
-      });
+      .sort((a, b) => b.sortKey - a.sortKey);
 
     // Bucket: Piutang lain (belum tempo / COD / NET tanpa invoice)
     const piutangLainAll: NotifItem[] = piutangAll
@@ -309,8 +323,10 @@ export function NotificationBell() {
         desc: `${info.status === 'DP' ? 'DP sebagian' : info.status} · sisa Rp ${fmt(info.sisaTagihan)}`,
         to: '/finance',
         severity: (info.status === 'Belum Bayar' ? 'high' : 'medium') as Severity,
+        // Belum Bayar di atas, lalu sisa tagihan terbesar
+        sortKey: (info.status === 'Belum Bayar' ? 1e12 : 0) + info.sisaTagihan,
       }))
-      .sort((a, b) => (a.severity === 'high' ? 0 : 1) - (b.severity === 'high' ? 0 : 1));
+      .sort((a, b) => b.sortKey - a.sortKey);
 
     // Filter snoozed dari setiap bucket
     const filterSnoozed = (arr: NotifItem[]) => arr.filter(item => !isSnoozed(item.id));
@@ -350,6 +366,12 @@ export function NotificationBell() {
     buckets.overdue.length + buckets.stok.length +
     buckets.jatuhTempo.length + buckets.akanJatuhTempo.length +
     buckets.piutangLain.length;
+
+  // Ada item kritis (jatuh tempo lewat / habis stok) → badge pulse halus
+  const hasCritical =
+    buckets.jatuhTempo.length > 0 ||
+    buckets.overdue.some(o => o.severity === 'high') ||
+    buckets.stok.some(s => s.severity === 'high');
 
   // ── Wiggle animation hanya saat count berubah (bukan terus) ─────────────────
   const [wiggle, setWiggle] = useState(false);
@@ -462,10 +484,19 @@ export function NotificationBell() {
       >
         <Bell className={`w-4 h-4 ${wiggle ? 'animate-[wiggle_0.8s_ease-in-out]' : ''}`} aria-hidden="true" />
         {totalActive > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-3xs font-bold rounded-full flex items-center justify-center px-0.5 leading-none pointer-events-none">
-            {totalActive > 99 ? '99+' : totalActive}
-          </span>
+          <>
+            {hasCritical && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full bg-red-500/60 animate-ping pointer-events-none" aria-hidden="true" />
+            )}
+            <span className={`absolute -top-0.5 -right-0.5 min-w-[16px] h-4 ${hasCritical ? 'bg-red-500' : 'bg-amber-500'} text-white text-3xs font-bold rounded-full flex items-center justify-center px-0.5 leading-none pointer-events-none ring-1 ring-slate-900/40`}>
+              {totalActive > 99 ? '99+' : totalActive}
+            </span>
+          </>
         )}
+        {/* Live region: announce count change ke screen reader */}
+        <span className="sr-only" aria-live="polite" aria-atomic="true">
+          {totalActive === 0 ? 'Tidak ada notifikasi aktif' : `${totalActive} notifikasi aktif`}
+        </span>
       </button>
 
       {open && dropPos && createPortal(
@@ -535,6 +566,7 @@ export function NotificationBell() {
                 color="bg-red-100 text-red-700"
                 items={sliced.jatuhTempo.items}
                 hiddenCount={sliced.jatuhTempo.hidden}
+                viewAllTo="/finance"
                 onSnooze={snooze}
                 onClose={close}
               />
@@ -544,6 +576,7 @@ export function NotificationBell() {
                 color="bg-amber-100 text-amber-700"
                 items={sliced.akanJatuhTempo.items}
                 hiddenCount={sliced.akanJatuhTempo.hidden}
+                viewAllTo="/finance"
                 onSnooze={snooze}
                 onClose={close}
               />
@@ -553,6 +586,7 @@ export function NotificationBell() {
                 color="bg-red-50 text-red-600"
                 items={sliced.overdue.items}
                 hiddenCount={sliced.overdue.hidden}
+                viewAllTo="/work-orders"
                 onSnooze={snooze}
                 onClose={close}
               />
@@ -562,6 +596,7 @@ export function NotificationBell() {
                 color="bg-amber-50 text-amber-700"
                 items={sliced.stok.items}
                 hiddenCount={sliced.stok.hidden}
+                viewAllTo="/inventory"
                 onSnooze={snooze}
                 onClose={close}
               />
@@ -571,6 +606,7 @@ export function NotificationBell() {
                 color="bg-orange-50 text-orange-700"
                 items={sliced.piutangLain.items}
                 hiddenCount={sliced.piutangLain.hidden}
+                viewAllTo="/finance"
                 onSnooze={snooze}
                 onClose={close}
               />
@@ -597,7 +633,7 @@ export function NotificationBell() {
                 )}
               </div>
               <p className="text-2xs text-slate-400 mt-1 italic">
-                Tip: arahkan kursor ke notifikasi → klik <BellOff className="w-2.5 h-2.5 inline-block" /> untuk tunda 24 jam.
+                Klik ikon <BellOff className="w-2.5 h-2.5 inline-block align-text-bottom" /> di kanan baris untuk tunda 24 jam.
               </p>
             </div>
           )}
