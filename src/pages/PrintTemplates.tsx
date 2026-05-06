@@ -333,10 +333,10 @@ export default function PrintTemplates() {
           @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             body { background: white !important; margin: 0; padding: 0; }
-            @page { size: A4 portrait; margin: 1cm; }
+            @page { size: A4 portrait; margin: 0.5cm; }
             .no-print { display: none !important; }
             .half-a4-page {
-              max-height: 128mm;
+              max-height: 138mm;
               overflow: hidden;
               page-break-inside: avoid;
               page-break-after: avoid;
@@ -514,10 +514,10 @@ export default function PrintTemplates() {
           @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             body { background: white !important; margin: 0; padding: 0; }
-            @page { size: A4 portrait; margin: 1cm; }
+            @page { size: A4 portrait; margin: 0.5cm; }
             .no-print { display: none !important; }
             .half-a4-page {
-              max-height: 128mm;
+              max-height: 138mm;
               overflow: hidden;
               page-break-inside: avoid;
               page-break-after: avoid;
@@ -915,10 +915,10 @@ export default function PrintTemplates() {
           @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             body { background: white !important; margin: 0; padding: 0; }
-            @page { size: A4 portrait; margin: 1cm; }
+            @page { size: A4 portrait; margin: 0.5cm; }
             .no-print { display: none !important; }
             .half-a4-page {
-              max-height: 128mm;
+              max-height: 138mm;
               overflow: hidden;
               page-break-inside: avoid;
               page-break-after: avoid;
