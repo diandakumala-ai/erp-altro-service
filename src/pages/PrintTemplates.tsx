@@ -110,7 +110,7 @@ export default function PrintTemplates() {
           </div>
         </div>
 
-        <div className="bg-white mx-auto my-8 px-12 py-10 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 w-[210mm] min-h-[297mm] font-sans">
+        <div className="bg-white mx-auto my-8 px-12 py-10 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:w-auto print:min-h-0 w-[210mm] min-h-[297mm] font-sans">
           <div className="flex justify-between items-center border-b-2 border-slate-800 pb-5 mb-6">
             <div className="flex items-center gap-4">
               <img src={bs.logoUrl || '/primary-logo.png'} alt="Logo" className="w-14 h-14 object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
@@ -353,7 +353,7 @@ export default function PrintTemplates() {
         </div>
 
         {/* Halaman A5 Landscape */}
-        <div className="bg-white text-black px-7 py-5 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none text-sm">
+        <div className="bg-white text-black px-7 py-5 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none print:min-h-0 print:w-full text-sm">
 
           {/* Header */}
           <div className="flex justify-between items-start mb-4 border-b-2 border-black pb-3">
@@ -549,7 +549,7 @@ export default function PrintTemplates() {
         </div>
 
         {/* Halaman A5 Landscape */}
-        <div className="relative bg-white text-black px-7 py-5 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none text-xs">
+        <div className="relative bg-white text-black px-7 py-5 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none print:min-h-0 print:w-full text-xs">
 
           {/* Watermark OVERDUE — hanya muncul kalau piutang lewat tempo */}
           {piutang.isOverdue && (
@@ -802,7 +802,7 @@ export default function PrintTemplates() {
         </div>
 
         {/* Konten A4 */}
-        <div className="spk-page bg-white text-black px-10 py-7 font-sans max-w-[210mm] mx-auto my-8 shadow-2xl print:shadow-none print:my-0 print:max-w-none text-sm">
+        <div className="spk-page bg-white text-black px-10 py-7 font-sans max-w-[210mm] mx-auto my-8 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none print:w-full text-sm">
 
           {/* Header */}
           <div className="flex items-center justify-center gap-4 border-b-2 border-black pb-3 mb-4">
@@ -924,7 +924,7 @@ export default function PrintTemplates() {
         </div>
 
         {/* Halaman A5 Landscape */}
-        <div className="bg-white text-black px-7 py-4 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none text-xs">
+        <div className="bg-white text-black px-7 py-4 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none print:min-h-0 print:w-full text-xs">
 
           {/* Header */}
           <div className="flex justify-between items-start mb-4 border-b-2 border-black pb-3">
