@@ -333,8 +333,14 @@ export default function PrintTemplates() {
           @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             body { background: white !important; margin: 0; padding: 0; }
-            @page { size: A5 landscape; margin: 0.8cm; }
+            @page { size: A4 portrait; margin: 1cm; }
             .no-print { display: none !important; }
+            .half-a4-page {
+              max-height: 128mm;
+              overflow: hidden;
+              page-break-inside: avoid;
+              page-break-after: avoid;
+            }
           }
         `}</style>
 
@@ -342,7 +348,7 @@ export default function PrintTemplates() {
         <div className="no-print sticky top-0 left-0 right-0 bg-slate-800 text-white p-3 flex justify-between items-center z-50 shadow-md">
           <div>
             <h2 className="font-semibold text-base">Preview {headerTitle} · {docNo}</h2>
-            <p className="text-xs text-slate-300">Kertas ½ A4 (A5 Landscape) · Horizontal · Margin 0.8 cm</p>
+            <p className="text-xs text-slate-300">Cetak A4 portrait · Konten muat di ½ A4 atas — kompatibel kertas carbon copy ½ A4</p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => window.close()} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium">Tutup</button>
@@ -352,8 +358,8 @@ export default function PrintTemplates() {
           </div>
         </div>
 
-        {/* Halaman A5 Landscape */}
-        <div className="bg-white text-black px-7 py-5 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none print:min-h-0 print:w-full text-sm">
+        {/* Halaman ½ A4 (atas) — preview tampak seperti kertas carbon copy */}
+        <div className="half-a4-page bg-white text-black px-7 py-5 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none print:min-h-0 print:w-full text-sm">
 
           {/* Header */}
           <div className="flex justify-between items-start mb-4 border-b-2 border-black pb-3">
@@ -508,8 +514,14 @@ export default function PrintTemplates() {
           @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             body { background: white !important; margin: 0; padding: 0; }
-            @page { size: A5 landscape; margin: 0.8cm; }
+            @page { size: A4 portrait; margin: 1cm; }
             .no-print { display: none !important; }
+            .half-a4-page {
+              max-height: 128mm;
+              overflow: hidden;
+              page-break-inside: avoid;
+              page-break-after: avoid;
+            }
           }
           /* Watermark OVERDUE — diagonal merah saat dicetak ulang piutang lewat tempo */
           .overdue-watermark {
@@ -537,7 +549,7 @@ export default function PrintTemplates() {
         <div className="no-print sticky top-0 left-0 right-0 bg-slate-800 text-white p-3 flex justify-between items-center z-50 shadow-md">
           <div>
             <h2 className="font-semibold text-base">Preview {headerTitle} · {invoiceNo}</h2>
-            <p className="text-xs text-slate-300">Kertas ½ A4 (A5 Landscape) · Horizontal · Margin 0.8 cm</p>
+            <p className="text-xs text-slate-300">Cetak A4 portrait · Konten muat di ½ A4 atas — kompatibel kertas carbon copy ½ A4</p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => window.close()} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium">Tutup</button>
@@ -548,8 +560,8 @@ export default function PrintTemplates() {
           </div>
         </div>
 
-        {/* Halaman A5 Landscape */}
-        <div className="relative bg-white text-black px-7 py-5 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none print:min-h-0 print:w-full text-xs">
+        {/* Halaman ½ A4 (atas) — preview tampak seperti kertas carbon copy */}
+        <div className="half-a4-page relative bg-white text-black px-7 py-5 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none print:min-h-0 print:w-full text-xs">
 
           {/* Watermark OVERDUE — hanya muncul kalau piutang lewat tempo */}
           {piutang.isOverdue && (
@@ -903,8 +915,14 @@ export default function PrintTemplates() {
           @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             body { background: white !important; margin: 0; padding: 0; }
-            @page { size: A5 landscape; margin: 0.8cm; }
+            @page { size: A4 portrait; margin: 1cm; }
             .no-print { display: none !important; }
+            .half-a4-page {
+              max-height: 128mm;
+              overflow: hidden;
+              page-break-inside: avoid;
+              page-break-after: avoid;
+            }
           }
         `}</style>
 
@@ -912,7 +930,7 @@ export default function PrintTemplates() {
         <div className="no-print sticky top-0 left-0 right-0 bg-slate-800 text-white p-3 flex justify-between items-center z-50 shadow-md">
           <div>
             <h2 className="font-semibold text-base">Preview Surat Jalan · {wo.id}</h2>
-            <p className="text-xs text-slate-300">Kertas ½ A4 (A5 Landscape) · Horizontal · Margin 0.8 cm</p>
+            <p className="text-xs text-slate-300">Cetak A4 portrait · Konten muat di ½ A4 atas — kompatibel kertas carbon copy ½ A4</p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => window.close()} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium">Tutup</button>
@@ -923,8 +941,8 @@ export default function PrintTemplates() {
           </div>
         </div>
 
-        {/* Halaman A5 Landscape */}
-        <div className="bg-white text-black px-7 py-4 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none print:min-h-0 print:w-full text-xs">
+        {/* Halaman ½ A4 (atas) — preview tampak seperti kertas carbon copy */}
+        <div className="half-a4-page bg-white text-black px-7 py-4 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none print:min-h-0 print:w-full text-xs">
 
           {/* Header */}
           <div className="flex justify-between items-start mb-4 border-b-2 border-black pb-3">
