@@ -60,54 +60,120 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@39
 
-      - name: Resolve Vercel ORG_ID untuk PROJECT_ID yang sudah fix
+      - name: Vercel API — diagnostik raw (token + project + teams)
         id: discover
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          # PROJECT_ID di-hardcode sesuai instruksi user — lebih reliable daripada cari-nama
-          # (project Vercel pernah ganti nama: erp / erp-app / erp-altro-service).
-          FINAL_PROJ_ID="prj_0k1EllNoJNBOYzzBdCSeKmcAEmaG"
-          echo "Target PROJECT_ID: $FINAL_PROJ_ID"
+          TARGET_PROJ_ID="prj_0k1EllNoJNBOYzzBdCSeKmcAEmaG"
+          PROJECT_CANDIDATES="erp erp-app erp-altro-service"
 
-          echo "== Token owner =="
-          curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v2/user" \
-            | jq -r '"  username=" + .user.username + " | email=" + .user.email'
+          # Helper: panggil API, dump raw body + HTTP status, return body via stdout
+          api() {
+            local url=$1
+            local label=$2
+            local status
+            status=$(curl -sS -o /tmp/api_body -w "%{http_code}" \
+              -H "Authorization: Bearer $VERCEL_TOKEN" "$url")
+            echo "─── $label" >&2
+            echo "  URL:    $url" >&2
+            echo "  HTTP:   $status" >&2
+            echo "  Body:   $(head -c 500 /tmp/api_body)" >&2
+            echo "" >&2
+            cat /tmp/api_body
+            return $([ "$status" = "200" ] && echo 0 || echo 1)
+          }
+
+          # ── Sanity check: token format ──
+          TOK_LEN=$(printf "%s" "$VERCEL_TOKEN" | wc -c)
+          # Hash pertama-4-char saja, supaya bisa cek "token yang dipakai sama dgn yang dimaksud" tanpa leak
+          TOK_PREFIX=$(printf "%s" "$VERCEL_TOKEN" | head -c 4)
+          echo "Token length: $TOK_LEN | prefix: $TOK_PREFIX..."
           echo
 
-          # Cek di personal scope
-          echo "== Cek project di personal scope =="
-          status=$(curl -sS -o /tmp/proj.json -w "%{http_code}" \
-            -H "Authorization: Bearer $VERCEL_TOKEN" \
-            "https://api.vercel.com/v9/projects/$FINAL_PROJ_ID")
-          if [ "$status" = "200" ]; then
-            FINAL_ORG_ID=$(curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
-              "https://api.vercel.com/v2/user" | jq -r '.user.id')
-            echo "✓ Project ditemukan di personal scope. ORG_ID (user)=$FINAL_ORG_ID"
-          else
-            echo "→ Tidak ada di personal scope (http $status). Cari di teams…"
-            curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
-              "https://api.vercel.com/v2/teams" > /tmp/teams.json
-            jq -r '.teams[]? | "  - \(.name) | id=\(.id) | slug=\(.slug)"' < /tmp/teams.json
+          # ── /v2/user (raw) ──
+          USER_BODY=$(api "https://api.vercel.com/v2/user" "GET /v2/user")
+          USER_ID=$(echo "$USER_BODY" | jq -r '.user.id // empty')
+          USERNAME=$(echo "$USER_BODY" | jq -r '.user.username // empty')
 
-            FINAL_ORG_ID=""
-            for tid in $(jq -r '.teams[]? | .id' < /tmp/teams.json); do
-              status=$(curl -sS -o /tmp/proj.json -w "%{http_code}" \
+          # ── /v2/teams (raw) ──
+          TEAMS_BODY=$(api "https://api.vercel.com/v2/teams" "GET /v2/teams" || true)
+          TEAM_IDS=$(echo "$TEAMS_BODY" | jq -r '.teams[]? | .id')
+
+          # ── /v9/projects (personal, raw) ──
+          PROJ_PERS=$(api "https://api.vercel.com/v9/projects?limit=100" "GET /v9/projects (personal)" || true)
+          echo "Personal projects:"
+          echo "$PROJ_PERS" | jq -r '.projects[]? | "  - \(.name) [\(.id)]"' || echo "  (parsing failed)"
+          echo
+
+          # ── /v9/projects per team (raw) ──
+          for tid in $TEAM_IDS; do
+            PROJ_TEAM=$(api "https://api.vercel.com/v9/projects?teamId=$tid&limit=100" "GET /v9/projects (team=$tid)" || true)
+            echo "Projects in team $tid:"
+            echo "$PROJ_TEAM" | jq -r '.projects[]? | "  - \(.name) [\(.id)]"' || echo "  (parsing failed)"
+            # Cache untuk pencarian by ID/name
+            echo "$PROJ_TEAM" > /tmp/projs_$tid.json
+            echo
+          done
+
+          # ── Try GET target project directly (personal + per team) ──
+          echo "─── Pencarian target project ───"
+          FINAL_PROJ_ID=""
+          FINAL_ORG_ID=""
+
+          STATUS=$(curl -sS -o /tmp/target.json -w "%{http_code}" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v9/projects/$TARGET_PROJ_ID")
+          echo "  /v9/projects/$TARGET_PROJ_ID (personal) → HTTP $STATUS"
+          if [ "$STATUS" = "200" ]; then
+            FINAL_PROJ_ID=$TARGET_PROJ_ID
+            FINAL_ORG_ID=$USER_ID
+            echo "  ✓ Ketemu di personal scope"
+          else
+            for tid in $TEAM_IDS; do
+              STATUS=$(curl -sS -o /tmp/target.json -w "%{http_code}" \
                 -H "Authorization: Bearer $VERCEL_TOKEN" \
-                "https://api.vercel.com/v9/projects/$FINAL_PROJ_ID?teamId=$tid")
-              if [ "$status" = "200" ]; then
+                "https://api.vercel.com/v9/projects/$TARGET_PROJ_ID?teamId=$tid")
+              echo "  /v9/projects/$TARGET_PROJ_ID?teamId=$tid → HTTP $STATUS"
+              if [ "$STATUS" = "200" ]; then
+                FINAL_PROJ_ID=$TARGET_PROJ_ID
                 FINAL_ORG_ID=$tid
-                echo "✓ Project ditemukan di team $tid"
+                echo "  ✓ Ketemu di team $tid"
                 break
               fi
             done
-
-            if [ -z "$FINAL_ORG_ID" ]; then
-              echo "::error::PROJECT_ID $FINAL_PROJ_ID tidak ditemukan di personal scope maupun team manapun yang bisa diakses VERCEL_TOKEN. Cek (1) token punya scope ke owner project; (2) PROJECT_ID benar."
-              exit 1
-            fi
           fi
 
+          # Fallback: cari by nama kandidat di response yang sudah di-dump
+          if [ -z "$FINAL_PROJ_ID" ]; then
+            echo "  Target ID tidak ketemu. Coba fallback by nama: $PROJECT_CANDIDATES"
+            for cand in $PROJECT_CANDIDATES; do
+              pid=$(echo "$PROJ_PERS" | jq -r --arg n "$cand" '.projects[]? | select(.name==$n) | .id' | head -1)
+              if [ -n "$pid" ]; then
+                FINAL_PROJ_ID=$pid; FINAL_ORG_ID=$USER_ID
+                echo "  ✓ Fallback name '$cand' ketemu di personal: $pid"; break
+              fi
+            done
+          fi
+          if [ -z "$FINAL_PROJ_ID" ]; then
+            for tid in $TEAM_IDS; do
+              for cand in $PROJECT_CANDIDATES; do
+                pid=$(jq -r --arg n "$cand" '.projects[]? | select(.name==$n) | .id' < /tmp/projs_$tid.json | head -1)
+                if [ -n "$pid" ]; then
+                  FINAL_PROJ_ID=$pid; FINAL_ORG_ID=$tid
+                  echo "  ✓ Fallback name '$cand' ketemu di team $tid: $pid"; break 2
+                fi
+              done
+            done
+          fi
+
+          if [ -z "$FINAL_PROJ_ID" ]; then
+            echo "::error::Token tidak punya akses ke target project maupun nama kandidat. Lihat dump di atas — kalau /v2/user balikin empty/error berarti token invalid; kalau /v2/teams kosong berarti token scope hanya personal tanpa akses team."
+            exit 1
+          fi
+
+          echo
+          echo "→ FINAL: PROJECT_ID=$FINAL_PROJ_ID  ORG_ID=$FINAL_ORG_ID"
           echo "PROJECT_ID=$FINAL_PROJ_ID" >> "$GITHUB_OUTPUT"
           echo "ORG_ID=$FINAL_ORG_ID" >> "$GITHUB_OUTPUT"
 
