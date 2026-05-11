@@ -14,9 +14,12 @@ const VARIANTS: Record<Variant, string> = {
   'soft-danger': 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-100',
 };
 
+// Touch target Apple HIG min 44px / Material 48px. Di mobile (<sm) paksa
+// min-h-[44px] supaya tombol tetap mudah di-tap; di desktop revert ke
+// kompak (min-h-0) supaya UI tidak terlalu rapat.
 const SIZES: Record<Size, string> = {
-  sm: 'px-3 py-1.5 text-sm gap-1.5',
-  md: 'px-4 py-2 text-sm gap-2',
+  sm: 'min-h-[44px] sm:min-h-0 px-3 py-1.5 text-sm gap-1.5',
+  md: 'min-h-[44px] sm:min-h-0 px-4 py-2 text-sm gap-2',
 };
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

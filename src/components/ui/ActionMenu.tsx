@@ -55,7 +55,7 @@ export function ActionMenu({ actions, trigger, ariaLabel = 'Buka menu aksi', ali
         aria-label={ariaLabel}
         title={ariaLabel}
         onClick={() => setOpen(v => !v)}
-        className="inline-flex items-center justify-center w-8 h-8 rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 transition-colors"
+        className="inline-flex items-center justify-center w-11 h-11 sm:w-8 sm:h-8 rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 transition-colors"
       >
         {trigger ?? <MoreHorizontal className="w-4 h-4" aria-hidden="true" />}
       </button>
@@ -74,7 +74,7 @@ export function ActionMenu({ actions, trigger, ariaLabel = 'Buka menu aksi', ali
                   role="menuitem"
                   type="button"
                   onClick={() => { a.onClick(); setOpen(false); }}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left transition-colors focus-visible:outline-none focus-visible:bg-slate-100 ${
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm text-left min-h-[44px] sm:min-h-0 transition-colors focus-visible:outline-none focus-visible:bg-slate-100 ${
                     a.destructive
                       ? 'text-red-600 hover:bg-red-50'
                       : 'text-slate-700 hover:bg-slate-50'
