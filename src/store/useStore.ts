@@ -322,6 +322,58 @@ function adjustInventoryStock(
 }
 
 /**
+ * Apakah transaksi Finance ini adalah "Beli Material" yang seharusnya menambah
+ * stok inventory? Konvensi: kategori = 'Pengeluaran' dan deskripsi diawali
+ * "Beli Material - <nama>" (otomatis dari dropdown Finance).
+ */
+function isBeliMaterialTrx(trx: FinanceTransaction): boolean {
+  return trx.kategori === 'Pengeluaran' && (trx.deskripsi || '').startsWith('Beli Material - ');
+}
+
+/**
+ * Parse `nama` dan `qty` dari Beli Material transaction.
+ *
+ * Konvensi deskripsi yang didukung (prioritas tinggi → rendah):
+ *   1. `"Beli Material - <nama> x <N>"` — qty eksplisit
+ *   2. `"Beli Material - <nama>"` — qty di-infer dari `nominal / inv.hargaBeli`
+ *      (rounded). Inventory yang match by name dipakai untuk hargaBeli.
+ *   3. Fallback: qty = 1
+ *
+ * Return qty = 0 bila nama tidak ditemukan / tidak bisa di-parse → caller skip
+ * adjust inventory.
+ */
+function parseBeliMaterial(
+  trx: FinanceTransaction,
+  inventory: InventoryItem[],
+): { nama: string; qty: number } {
+  const raw = (trx.deskripsi || '').replace(/^Beli Material - /, '').trim();
+  if (!raw) return { nama: '', qty: 0 };
+
+  // Pattern: "<nama> x <N>" — N harus angka
+  const explicit = raw.match(/^(.+?)\s+x\s+(\d+(?:[.,]\d+)?)\s*(?:pcs?|unit|set|buah|lembar)?\s*$/i);
+  if (explicit) {
+    const nama = explicit[1].trim();
+    const qty = Number(explicit[2].replace(',', '.'));
+    return { nama, qty: isNaN(qty) || qty <= 0 ? 1 : qty };
+  }
+
+  const nama = raw;
+  const inv = inventory.find(i => i.nama.trim().toLowerCase() === nama.toLowerCase());
+  if (!inv) {
+    // Inventory belum ada — default qty 1 (akan auto-create di adjustInventoryStock
+    // path? Tidak — adjustInventoryStock no-op kalau barang tidak ada. Caller akan
+    // skip; transaksi tetap tercatat di Finance.)
+    return { nama, qty: 1 };
+  }
+
+  if (inv.hargaBeli > 0 && Math.abs(trx.nominal) > 0) {
+    const inferred = Math.round(Math.abs(trx.nominal) / inv.hargaBeli);
+    return { nama, qty: Math.max(inferred, 1) };
+  }
+  return { nama, qty: 1 };
+}
+
+/**
  * Cari customer yang match (by name) dengan `wo.customer`, atau create baru bila
  * tidak ada. Return `[customers list, matched/created customer id]`.
  *
@@ -1029,18 +1081,19 @@ export const useStore = create<AppState>((set) => ({
 
   updateFinance: (updatedTrx) => set((state) => {
     const prev = state.finance.find(t => t.id === updatedTrx.id);
-    const wasBeliMat = !!prev && prev.kategori === 'Pengeluaran' && (prev.deskripsi || '').startsWith('Beli Material - ');
-    const isBeliMat = updatedTrx.kategori === 'Pengeluaran' && (updatedTrx.deskripsi || '').startsWith('Beli Material - ');
+    const wasBeliMat = !!prev && isBeliMaterialTrx(prev);
+    const isBeliMat = isBeliMaterialTrx(updatedTrx);
 
     let newInventory = state.inventory;
-    if (!wasBeliMat && isBeliMat) {
-      const nama = updatedTrx.deskripsi.replace(/^Beli Material - /, '').trim();
-      newInventory = state.inventory.map(inv =>
-        inv.nama.toLowerCase() === nama.toLowerCase()
-          ? { ...inv, stok: inv.stok + 1 }
-          : inv
-      );
-      newInventory.forEach(inv => db.inventory.upsert(inv));
+    // Rollback stok dari trx sebelumnya bila itu Beli Material
+    if (wasBeliMat && prev) {
+      const { nama, qty } = parseBeliMaterial(prev, state.inventory);
+      if (qty > 0) newInventory = adjustInventoryStock(newInventory, nama, -qty);
+    }
+    // Apply stok dari trx baru bila itu Beli Material
+    if (isBeliMat) {
+      const { nama, qty } = parseBeliMaterial(updatedTrx, newInventory);
+      if (qty > 0) newInventory = adjustInventoryStock(newInventory, nama, qty);
     }
 
     db.finance.upsert(updatedTrx);
@@ -1051,14 +1104,9 @@ export const useStore = create<AppState>((set) => ({
   }),
   addFinance: (trx) => set((state) => {
     let newInventory = state.inventory;
-    if (trx.kategori === 'Pengeluaran' && (trx.deskripsi || '').startsWith('Beli Material - ')) {
-      const nama = trx.deskripsi.replace(/^Beli Material - /, '').trim();
-      newInventory = state.inventory.map(inv =>
-        inv.nama.toLowerCase() === nama.toLowerCase()
-          ? { ...inv, stok: inv.stok + 1 }
-          : inv
-      );
-      newInventory.forEach(inv => db.inventory.upsert(inv));
+    if (isBeliMaterialTrx(trx)) {
+      const { nama, qty } = parseBeliMaterial(trx, state.inventory);
+      if (qty > 0) newInventory = adjustInventoryStock(newInventory, nama, qty);
     }
     db.finance.upsert(trx);
     toast.success(`Transaksi "${trx.deskripsi}" berhasil dicatat.`);
@@ -1067,7 +1115,20 @@ export const useStore = create<AppState>((set) => ({
   deleteFinance: (id) => {
     db.finance.delete(id);
     toast.info('Transaksi dihapus.');
-    set((state) => ({ finance: state.finance.filter(trx => trx.id !== id) }));
+    set((state) => {
+      const prev = state.finance.find(t => t.id === id);
+      // Rollback stok bila transaksi adalah Beli Material — stok yang sebelumnya
+      // ditambah oleh purchase ini dikembalikan ke level sebelum purchase.
+      let newInventory = state.inventory;
+      if (prev && isBeliMaterialTrx(prev)) {
+        const { nama, qty } = parseBeliMaterial(prev, state.inventory);
+        if (qty > 0) newInventory = adjustInventoryStock(newInventory, nama, -qty);
+      }
+      return {
+        finance: state.finance.filter(trx => trx.id !== id),
+        inventory: newInventory,
+      };
+    });
   },
 
   // ─── BOM actions: stok inventory ter-sync dengan BOM mutation ─────────────
