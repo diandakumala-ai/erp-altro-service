@@ -29,6 +29,52 @@ const navLinks = [
   { to: '/settings', label: 'Pengaturan', icon: SettingsIcon },
 ];
 
+// Bottom-nav 4 menu paling sering dipakai owner di mobile. Sisanya
+// (Inventory, Settings) tetap accessible via drawer (hamburger).
+const bottomNavLinks = [
+  { to: '/dashboard', label: 'Beranda', icon: LayoutDashboard },
+  { to: '/work-orders', label: 'WO', icon: Wrench },
+  { to: '/finance', label: 'Keuangan', icon: Receipt },
+  { to: '/customers', label: 'Pelanggan', icon: Users },
+];
+
+const BottomNav = () => {
+  const location = useLocation();
+  return (
+    <nav
+      aria-label="Navigasi cepat"
+      className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-[0_-2px_8px_rgba(0,0,0,0.04)] flex"
+      style={{
+        zIndex: 'var(--z-sticky)',
+        // iOS safe area — sit above home indicator
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}
+    >
+      {bottomNavLinks.map(({ to, label, icon: Icon }) => {
+        const isActive =
+          location.pathname === to ||
+          (to === '/dashboard' && location.pathname === '/') ||
+          location.pathname.startsWith(to + '/');
+        return (
+          <Link
+            key={to}
+            to={to}
+            aria-current={isActive ? 'page' : undefined}
+            className={`flex-1 flex flex-col items-center justify-center min-h-[56px] py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-300 ${
+              isActive
+                ? 'text-indigo-700 bg-indigo-50/60'
+                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50 active:bg-slate-100'
+            }`}
+          >
+            <Icon className="w-5 h-5" aria-hidden="true" />
+            <span className="text-2xs font-medium mt-0.5">{label}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+};
+
 const Sidebar = ({
   collapsed, onToggle, mobileOpen, onMobileClose, user, onLogout
 }: {
@@ -267,7 +313,9 @@ function AppShell({ session }: { session: Session }) {
         >
           <NotificationBell variant="header" />
         </div>
-        <div className="flex-1 overflow-hidden flex">
+        {/* Padding-bottom mobile = bottom-nav height (56px) + iOS safe area.
+            Tailwind v4 arbitrary value dengan env() — desktop pb-0 override. */}
+        <div className="flex-1 overflow-hidden flex pb-[calc(56px+env(safe-area-inset-bottom))] lg:pb-0">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
@@ -287,6 +335,7 @@ function AppShell({ session }: { session: Session }) {
           </Routes>
         </div>
       </div>
+      <BottomNav />
     </div>
   );
 }
