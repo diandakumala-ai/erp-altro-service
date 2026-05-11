@@ -202,7 +202,18 @@ function useTodayISO(): string {
 // ─── Main component ───────────────────────────────────────────────────────────
 const ITEMS_PER_BUCKET = 5; // tampil maks 5 per kategori, sisanya "+N lainnya"
 
-export function NotificationBell() {
+/**
+ * Notification bell — dipakai di dua tempat:
+ *  - `variant="sidebar"` (default): di footer sidebar dark mode. Cocok untuk
+ *    desktop. Bg gelap, hover ke slate-700.
+ *  - `variant="header"`: di header light mode (mobile). Bg terang, ikon slate-600,
+ *    hover ke slate-100. Touch target naik ke 40×40 (min Apple HIG).
+ */
+export interface NotificationBellProps {
+  variant?: 'sidebar' | 'header';
+}
+
+export function NotificationBell({ variant = 'sidebar' }: NotificationBellProps = {}) {
   const [open, setOpen] = useState(false);
   const [dropPos, setDropPos] = useState<{ top: number; left: number; maxH: number; width: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -514,21 +525,29 @@ export function NotificationBell() {
       <button
         ref={btnRef}
         onClick={() => (open ? close() : openDropdown())}
-        className={`relative w-8 h-8 flex items-center justify-center rounded-md transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
-          open ? 'text-white bg-slate-700' : 'text-slate-400 hover:text-white hover:bg-slate-700'
-        }`}
+        className={
+          variant === 'header'
+            // Light header — touch target 40×40, hover ke slate-100
+            ? `relative w-10 h-10 flex items-center justify-center rounded-md transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
+                open ? 'text-indigo-700 bg-indigo-50' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`
+            // Dark sidebar — kompak 32×32, hover ke slate-700
+            : `relative w-8 h-8 flex items-center justify-center rounded-md transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
+                open ? 'text-white bg-slate-700' : 'text-slate-400 hover:text-white hover:bg-slate-700'
+              }`
+        }
         title={totalActive > 0 ? `${totalActive} notifikasi aktif` : 'Tidak ada notifikasi'}
         aria-label={`Notifikasi${totalActive > 0 ? ` (${totalActive})` : ''}`}
         aria-expanded={open}
         aria-haspopup="dialog"
       >
-        <Bell className={`w-4 h-4 ${wiggle ? 'animate-[wiggle_0.8s_ease-in-out]' : ''}`} aria-hidden="true" />
+        <Bell className={`${variant === 'header' ? 'w-5 h-5' : 'w-4 h-4'} ${wiggle ? 'animate-[wiggle_0.8s_ease-in-out]' : ''}`} aria-hidden="true" />
         {totalActive > 0 && (
           <>
             {hasCritical && (
               <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full bg-red-500/60 animate-ping pointer-events-none" aria-hidden="true" />
             )}
-            <span className={`absolute -top-0.5 -right-0.5 min-w-[16px] h-4 ${hasCritical ? 'bg-red-500' : 'bg-amber-500'} text-white text-3xs font-bold rounded-full flex items-center justify-center px-0.5 leading-none pointer-events-none ring-1 ring-slate-900/40`}>
+            <span className={`absolute -top-0.5 -right-0.5 min-w-[16px] h-4 ${hasCritical ? 'bg-red-500' : 'bg-amber-500'} text-white text-3xs font-bold rounded-full flex items-center justify-center px-0.5 leading-none pointer-events-none ${variant === 'header' ? 'ring-2 ring-white' : 'ring-1 ring-slate-900/40'}`}>
               {totalActive > 99 ? '99+' : totalActive}
             </span>
           </>

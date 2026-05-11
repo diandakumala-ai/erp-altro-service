@@ -260,6 +260,13 @@ function AppShell({ session }: { session: Session }) {
         >
           <Menu className="w-5 h-5" aria-hidden="true" />
         </button>
+        {/* Notification bell mobile — di kanan atas, lg:hidden karena desktop punya bell di sidebar */}
+        <div
+          className="lg:hidden fixed top-1 right-2 bg-white rounded-md shadow-md"
+          style={{ zIndex: 'var(--z-sticky)' }}
+        >
+          <NotificationBell variant="header" />
+        </div>
         <div className="flex-1 overflow-hidden flex">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />

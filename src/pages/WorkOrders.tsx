@@ -340,7 +340,7 @@ export default function WorkOrders() {
 
   return (
     <div className="flex-1 flex flex-col bg-slate-50 overflow-hidden">
-      <header className="bg-white border-b border-slate-200 h-12 flex items-center pl-14 pr-4 lg:px-6 justify-between shrink-0">
+      <header className="bg-white border-b border-slate-200 h-12 flex items-center pl-14 pr-14 lg:px-6 justify-between shrink-0">
         <h2 className="text-base font-semibold text-slate-800">Manajemen Pekerjaan (Work Orders)</h2>
         <div className="flex items-center gap-2">
           <Button variant="success" onClick={() => { exportWorkOrders(workOrders, finance); toast.success('Data Work Orders berhasil di-export!'); }}>

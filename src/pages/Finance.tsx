@@ -438,7 +438,7 @@ export default function Finance() {
 
   return (
     <div className="flex-1 flex flex-col bg-slate-50 overflow-hidden">
-      <header className="bg-white border-b border-slate-200 h-12 flex items-center pl-14 pr-4 lg:px-6 justify-between shrink-0">
+      <header className="bg-white border-b border-slate-200 h-12 flex items-center pl-14 pr-14 lg:px-6 justify-between shrink-0">
         <div className="flex items-center gap-6 overflow-hidden">
           <h2 className="text-base font-semibold text-slate-800 whitespace-nowrap">Manajemen Keuangan (Finance)</h2>
           <div role="tablist" aria-label="Tab Finance" className="flex bg-slate-100 p-1 rounded-lg overflow-x-auto no-scrollbar relative">
