@@ -438,9 +438,9 @@ export default function PrintTemplates() {
           </div>
 
           {/* Nominal box + Tanda tangan */}
-          <div className="flex justify-between items-end mt-6 px-2">
+          <div className="flex justify-between items-end mt-3 px-2">
             {/* Nominal box besar — kiri */}
-            <div className={`border-2 ${isKuitansi ? 'border-emerald-700' : 'border-indigo-700'} rounded-lg px-5 py-3 inline-block`}>
+            <div className={`border-2 ${isKuitansi ? 'border-emerald-700' : 'border-indigo-700'} rounded-lg px-5 py-2 inline-block`}>
               <p className="text-2xs font-semibold uppercase tracking-wider text-slate-500">Jumlah</p>
               <p className={`text-2xl font-black font-mono ${isKuitansi ? 'text-emerald-700' : 'text-indigo-700'}`}>
                 Rp {fmt(nominalAbs)},-
@@ -451,7 +451,7 @@ export default function PrintTemplates() {
             <div className="text-center w-52">
               <p className="text-xs">{cityShort(bs.kota) || 'Pekanbaru'}, {trxTanggal}</p>
               <p className="text-xs mt-0.5">{isKuitansi ? 'Yang menerima,' : 'Yang membayarkan,'}</p>
-              <div className="h-16 mt-1"></div>
+              <div className="h-12 mt-1"></div>
               <div className="border-t border-slate-700 pt-1">
                 <p className="text-sm font-bold">{bs.namaPemilik || bs.namaBengkel}</p>
                 <p className="text-2xs text-slate-500">{bs.jabatanPemilik || 'Bagian Keuangan'}</p>
@@ -460,7 +460,7 @@ export default function PrintTemplates() {
           </div>
 
           {/* Footnote */}
-          <div className="mt-6 pt-2 border-t border-dashed border-slate-300 text-2xs text-slate-400 italic text-center">
+          <div className="mt-3 pt-2 border-t border-dashed border-slate-300 text-2xs text-slate-400 italic text-center">
             {isKuitansi
               ? 'Kuitansi ini sah sebagai bukti penerimaan pembayaran.'
               : 'Bukti pembayaran ini diterbitkan sebagai dokumen pencatatan pengeluaran internal.'}
@@ -595,7 +595,7 @@ export default function PrintTemplates() {
           )}
 
           {/* Header */}
-          <div className="flex justify-between items-start mb-4 relative" style={{ zIndex: 2 }}>
+          <div className="flex justify-between items-start mb-2 relative" style={{ zIndex: 2 }}>
             <div className="flex items-start gap-3">
               <img
                 src={bs.logoUrl || '/primary-logo.png'}
@@ -650,7 +650,7 @@ export default function PrintTemplates() {
           </div>
 
           {/* Table */}
-          <table className="w-full border border-black mb-4 text-xs relative" style={{ zIndex: 2 }}>
+          <table className="w-full border border-black mb-2 text-xs relative" style={{ zIndex: 2 }}>
             <thead>
               <tr className="border-b border-black bg-slate-50">
                 <th className="py-1.5 px-2 border-r border-black text-center w-7">No.</th>
@@ -691,11 +691,11 @@ export default function PrintTemplates() {
               ))}
               {/* Filler */}
               <tr>
-                <td className="py-5 border-r border-black"></td>
-                <td className="py-5 border-r border-black"></td>
-                <td className="py-5 border-r border-black"></td>
-                <td className="py-5 border-r border-black"></td>
-                <td className="py-5"></td>
+                <td className="py-2 border-r border-black"></td>
+                <td className="py-2 border-r border-black"></td>
+                <td className="py-2 border-r border-black"></td>
+                <td className="py-2 border-r border-black"></td>
+                <td className="py-2"></td>
               </tr>
             </tbody>
             <tfoot>
@@ -792,12 +792,12 @@ export default function PrintTemplates() {
           </table>
 
           {/* Tanda Tangan — 2 kolom: Penerima (kiri) + Direktur (kanan) */}
-          <div className="grid grid-cols-2 gap-4 items-end mt-2 px-1 relative" style={{ zIndex: 2 }}>
+          <div className="grid grid-cols-2 gap-4 items-end mt-1 px-1 relative" style={{ zIndex: 2 }}>
             {/* Penerima */}
             <div className="text-center">
               <p className="text-xs font-medium">Penerima,</p>
-              <div className="h-14 mt-1"></div>
-              <div className="pt-1.5">
+              <div className="h-10 mt-1"></div>
+              <div className="pt-1">
                 <p className="text-xs">(................................)</p>
                 <p className="text-2xs text-gray-500 mt-0.5">{wo.customer}</p>
               </div>
@@ -806,8 +806,8 @@ export default function PrintTemplates() {
             <div className="text-center">
               <p className="text-2xs text-gray-500">{cityShort(bs.kota) || 'Pekanbaru'}, {today}</p>
               <p className="text-xs font-medium mt-0.5">Hormat Kami,</p>
-              <div className="h-14 mt-1"></div>
-              <div className="pt-1.5">
+              <div className="h-10 mt-1"></div>
+              <div className="pt-1">
                 <p className="font-bold text-xs">{bs.namaPemilik || bs.namaBengkel}</p>
                 <p className="text-2xs text-gray-500">{bs.jabatanPemilik || 'Direktur'}</p>
               </div>
@@ -1048,15 +1048,15 @@ export default function PrintTemplates() {
               </tr>
               {/* Filler */}
               <tr>
-                <td className="py-8 border-r border-black"></td>
-                <td className="py-8 border-r border-black"></td>
-                <td className="py-8 border-r border-black"></td>
-                <td className="py-8"></td>
+                <td className="py-3 border-r border-black"></td>
+                <td className="py-3 border-r border-black"></td>
+                <td className="py-3 border-r border-black"></td>
+                <td className="py-3"></td>
               </tr>
             </tbody>
           </table>
 
-          <p className="mb-4 text-xs italic">Barang diterima dalam keadaan baik dan cukup.</p>
+          <p className="mb-2 text-xs italic">Barang diterima dalam keadaan baik dan cukup.</p>
 
           {/* Tanda Tangan — 3 kolom: Penerima · Pengirim · Direktur */}
           <div className="grid grid-cols-3 gap-3 items-end mt-1">
@@ -1064,8 +1064,8 @@ export default function PrintTemplates() {
             {/* Penerima */}
             <div className="text-center">
               <p className="text-xs font-medium">Penerima,</p>
-              <div className="h-14 mt-1"></div>
-              <div className="pt-1.5">
+              <div className="h-10 mt-1"></div>
+              <div className="pt-1">
                 <p className="text-xs">(................................)</p>
                 <p className="text-2xs text-gray-500 mt-0.5">{wo.customer}</p>
               </div>
@@ -1074,8 +1074,8 @@ export default function PrintTemplates() {
             {/* Pengirim */}
             <div className="text-center">
               <p className="text-xs font-medium">Pengirim / Supir,</p>
-              <div className="h-14 mt-1"></div>
-              <div className="pt-1.5">
+              <div className="h-10 mt-1"></div>
+              <div className="pt-1">
                 <p className="text-xs">(................................)</p>
                 <p className="text-2xs text-gray-500 mt-0.5">&nbsp;</p>
               </div>
@@ -1085,8 +1085,8 @@ export default function PrintTemplates() {
             <div className="text-center">
               <p className="text-2xs text-gray-500">{cityShort(bs.kota) || 'Pekanbaru'}, {today}</p>
               <p className="text-xs font-medium mt-0.5">Hormat Kami,</p>
-              <div className="h-14 mt-1"></div>
-              <div className="pt-1.5">
+              <div className="h-10 mt-1"></div>
+              <div className="pt-1">
                 <p className="font-bold text-xs">{bs.namaPemilik || bs.namaBengkel}</p>
                 <p className="text-2xs text-gray-500">{bs.jabatanPemilik || 'Direktur'}</p>
               </div>
@@ -1201,11 +1201,11 @@ export default function PrintTemplates() {
               </tr>
               {/* Filler */}
               <tr>
-                <td className="py-5 border-r border-black"></td>
-                <td className="py-5 border-r border-black"></td>
-                <td className="py-5 border-r border-black"></td>
-                <td className="py-5 border-r border-black"></td>
-                <td className="py-5"></td>
+                <td className="py-2 border-r border-black"></td>
+                <td className="py-2 border-r border-black"></td>
+                <td className="py-2 border-r border-black"></td>
+                <td className="py-2 border-r border-black"></td>
+                <td className="py-2"></td>
               </tr>
             </tbody>
           </table>
@@ -1238,11 +1238,11 @@ export default function PrintTemplates() {
           </div>
 
           {/* Tanda Tangan — 2 kolom: Pengirim/Customer · Penerima/Admin */}
-          <div className="grid grid-cols-2 gap-6 items-end mt-3 px-4">
+          <div className="grid grid-cols-2 gap-6 items-end mt-2 px-4">
             <div className="text-center">
               <p className="text-xs font-medium">Yang Menyerahkan,</p>
-              <div className="h-16 mt-1"></div>
-              <div className="pt-1.5">
+              <div className="h-12 mt-1"></div>
+              <div className="pt-1">
                 <p className="text-xs">(................................)</p>
                 <p className="text-2xs text-gray-500 mt-0.5">{wo.customer}</p>
               </div>
@@ -1250,8 +1250,8 @@ export default function PrintTemplates() {
             <div className="text-center">
               <p className="text-2xs text-gray-500">{cityShort(bs.kota) || 'Pekanbaru'}, {tanggalTerima}</p>
               <p className="text-xs font-medium mt-0.5">Yang Menerima,</p>
-              <div className="h-16 mt-1"></div>
-              <div className="pt-1.5">
+              <div className="h-12 mt-1"></div>
+              <div className="pt-1">
                 <p className="font-bold text-xs">{bs.namaPemilik || bs.namaBengkel}</p>
                 <p className="text-2xs text-gray-500">{bs.jabatanPemilik || 'Admin Bengkel'}</p>
               </div>
