@@ -1,9 +1,9 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Plus, Trash2, Download, X, ChevronDown, FileText, BarChart2, BellRing, Printer, Wallet, FileSpreadsheet, Filter as FilterIcon, Receipt } from 'lucide-react';
-import { useStore, computeStatusBayar, type FinanceTransaction } from '../store/useStore';
+import { Plus, Trash2, Download, X, ChevronDown, FileText, BarChart2, BellRing, Printer, Wallet, FileSpreadsheet, Filter as FilterIcon, Receipt, TrendingUp, TrendingDown, Percent, Calculator, CalendarRange, Search } from 'lucide-react';
+import { useStore, computeStatusBayar, computeLabaRugi, periodeBulan, periodeTahun, type FinanceTransaction } from '../store/useStore';
 import { exportBukuKas, exportLaporanBulanan, exportPiutang, exportLaporanLengkap } from '../lib/exportExcel';
 import { toast } from '../lib/toast';
-import { Button, DataHeader, DataCell, EmptyRow, EmptyState, StatCard, SearchInput, ActionMenu, type SortDir } from '../components/ui';
+import { Button, DataHeader, DataCell, EmptyRow, EmptyState, StatCard, SearchInput, ActionMenu, Section, type SortDir } from '../components/ui';
 import { confirm } from '../lib/confirm';
 import { fmt as fmtNumber, fmtBulanTahun, fmtBulanPendekTahun, fmtTanggalPendekTahun } from '../lib/format';
 
@@ -248,6 +248,7 @@ export default function Finance() {
   const [activeTab, setActiveTab] = useState<'table' | 'report' | 'piutang'>('table');
   const workOrders = useStore(s => s.workOrders);
   const inventory = useStore(s => s.inventory);
+  const bengkelSettings = useStore(s => s.bengkelSettings);
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState<string | null>('tanggal');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -421,8 +422,77 @@ export default function Finance() {
   const availableMonths = useMemo(() => {
     const set = new Set<string>();
     finance.forEach(t => set.add(t.tanggal.slice(0, 7)));
+    // Pastikan periode current selalu ada di dropdown walau belum ada transaksi
+    set.add(reportPeriod);
     return Array.from(set).sort().reverse();
-  }, [finance]);
+  }, [finance, reportPeriod]);
+
+  // Search state untuk tabel rincian transaksi di tab Laporan
+  const [reportSearch, setReportSearch] = useState('');
+  const reportTrxFiltered = useMemo(() => {
+    const q = reportSearch.toLowerCase().trim();
+    if (!q) return reportTrxSorted;
+    return reportTrxSorted.filter(t =>
+      t.deskripsi.toLowerCase().includes(q) ||
+      t.kategori.toLowerCase().includes(q) ||
+      (t.subKategori ?? '').toLowerCase().includes(q) ||
+      t.tanggal.includes(q) ||
+      String(Math.abs(t.nominal)).includes(q)
+    );
+  }, [reportTrxSorted, reportSearch]);
+
+  // Comparison vs bulan sebelumnya (untuk delta %)
+  const prevPeriodStr = useMemo(() => {
+    const [y, m] = reportPeriod.split('-').map(Number);
+    const d = new Date(y, m - 2, 1); // m-1 bulan ini, m-2 bulan sebelumnya
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }, [reportPeriod]);
+
+  const prevPeriodPemasukan = useMemo(() =>
+    finance.filter(t => t.tanggal.startsWith(prevPeriodStr) && t.nominal > 0).reduce((a, b) => a + b.nominal, 0)
+  , [finance, prevPeriodStr]);
+  const prevPeriodPengeluaran = useMemo(() =>
+    Math.abs(finance.filter(t => t.tanggal.startsWith(prevPeriodStr) && t.nominal < 0).reduce((a, b) => a + b.nominal, 0))
+  , [finance, prevPeriodStr]);
+  const prevPeriodLaba = prevPeriodPemasukan - prevPeriodPengeluaran;
+
+  const pctDelta = (curr: number, prev: number): number | null => {
+    if (prev === 0) return curr === 0 ? 0 : null; // null = N/A
+    return ((curr - prev) / Math.abs(prev)) * 100;
+  };
+  const deltaPemasukan = pctDelta(reportPemasukan, prevPeriodPemasukan);
+  const deltaPengeluaran = pctDelta(reportPengeluaran, prevPeriodPengeluaran);
+  const deltaLaba = pctDelta(reportLaba, prevPeriodLaba);
+
+  // Margin laba bersih (% terhadap pemasukan)
+  const marginLaba = reportPemasukan > 0 ? (reportLaba / reportPemasukan) * 100 : 0;
+
+  // Estimasi pajak periode dipilih — pakai computeLabaRugi (proper UMKM/Badan)
+  const labaRugiPeriode = useMemo(
+    () => computeLabaRugi(workOrders, finance, bengkelSettings, periodeBulan(reportPeriod)),
+    [workOrders, finance, bengkelSettings, reportPeriod]
+  );
+  const labaRugiTahun = useMemo(
+    () => computeLabaRugi(workOrders, finance, bengkelSettings, periodeTahun(Number(reportPeriod.slice(0, 4)))),
+    [workOrders, finance, bengkelSettings, reportPeriod]
+  );
+
+  // Utang PPN periode — Σ PPN keluaran WO usePpn yg dibuat di periode ini
+  const utangPpnPeriode = useMemo(() => {
+    return workOrders
+      .filter(wo => wo.usePpn && wo.estimatedCost > 0 && (wo.tanggalInvoice ?? wo.dateIn ?? '').startsWith(reportPeriod))
+      .reduce((s, wo) => {
+        const base = Math.max(wo.estimatedCost - (wo.diskon ?? 0), 0);
+        return s + Math.round(base * ((wo.ppnPercent ?? 11) / 100));
+      }, 0);
+  }, [workOrders, reportPeriod]);
+
+  // Preset periode handlers
+  const setPeriodBulanIni = () => setReportPeriod(thisMonthStr);
+  const setPeriodBulanLalu = () => {
+    const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    setReportPeriod(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  };
 
   // --- PIUTANG (Outstanding Receivables) ---
   const piutangList = useMemo(() => {
@@ -445,14 +515,14 @@ export default function Finance() {
             <button role="tab" aria-selected={activeTab === 'table'} onClick={() => setActiveTab('table')} className={`px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 whitespace-nowrap transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 ${activeTab === 'table' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
               <FileText className="w-4 h-4" aria-hidden="true" /> Buku Kas
             </button>
-            <button role="tab" aria-selected={activeTab === 'report'} onClick={() => setActiveTab('report')} className={`px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 whitespace-nowrap transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 ${activeTab === 'report' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-              <BarChart2 className="w-4 h-4" aria-hidden="true" /> Laporan Laba Rugi
-            </button>
             <button role="tab" aria-selected={activeTab === 'piutang'} onClick={() => setActiveTab('piutang')} className={`px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 whitespace-nowrap transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 ${activeTab === 'piutang' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
               <Wallet className="w-4 h-4" aria-hidden="true" /> Piutang
               {piutangList.length > 0 && (
                 <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-2xs font-bold" aria-label={`${piutangList.length} piutang`}>{piutangList.length}</span>
               )}
+            </button>
+            <button role="tab" aria-selected={activeTab === 'report'} onClick={() => setActiveTab('report')} className={`px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 whitespace-nowrap transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 ${activeTab === 'report' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+              <BarChart2 className="w-4 h-4" aria-hidden="true" /> Laporan Keuangan
             </button>
           </div>
         </div>
@@ -491,12 +561,12 @@ export default function Finance() {
               }
               actions={[
                 {
-                  label: 'Laporan Keuangan (Internal)',
+                  label: `Ringkasan Bulanan — ${fmtBulanTahun(reportPeriod)}`,
                   icon: FileText,
                   onClick: () => window.open(`/print/laporan-keuangan?period=${reportPeriod}`, '_blank'),
                 },
                 {
-                  label: `Laporan Laba Rugi — ${reportPeriod}`,
+                  label: `Laporan Laba Rugi — ${fmtBulanTahun(reportPeriod)}`,
                   icon: BarChart2,
                   separator: true,
                   onClick: () => window.open(`/print/laba-rugi?period=${reportPeriod}`, '_blank'),
@@ -507,7 +577,7 @@ export default function Finance() {
                   onClick: () => window.open(`/print/laba-rugi?period=${reportPeriod.slice(0, 4)}`, '_blank'),
                 },
                 {
-                  label: `Neraca per Akhir ${reportPeriod}`,
+                  label: `Neraca per Akhir ${fmtBulanTahun(reportPeriod)}`,
                   icon: Wallet,
                   separator: true,
                   onClick: () => window.open(`/print/neraca?period=${reportPeriod}`, '_blank'),
@@ -747,63 +817,189 @@ export default function Finance() {
         {activeTab === 'report' && (
           <div className="flex-1 overflow-auto flex flex-col gap-4 p-1">
 
-            {/* Period Selector */}
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm px-5 py-3 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-semibold text-slate-600">Periode Laporan:</span>
-                <select
-                  value={reportPeriod}
-                  onChange={e => setReportPeriod(e.target.value)}
-                  className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 font-medium text-slate-700"
-                  aria-label="Pilih periode laporan"
-                >
-                  {availableMonths.map(m => (
-                    <option key={m} value={m}>{fmtBulanTahun(m)}</option>
-                  ))}
-                </select>
-                <span className="text-xs text-slate-400">({reportTrx.length} transaksi)</span>
+            {/* ─── PERIOD SELECTOR — preset chips + dropdown ──────────────── */}
+            <Section
+              title="Periode Laporan"
+              icon={CalendarRange}
+              accent="indigo"
+              rightSlot={
+                <span className="text-tiny text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                  {reportTrx.length} transaksi
+                </span>
+              }
+              bodyClassName="p-4"
+            >
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Preset chips */}
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={setPeriodBulanIni}
+                    aria-pressed={reportPeriod === thisMonthStr}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 ${
+                      reportPeriod === thisMonthStr
+                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                        : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-700'
+                    }`}
+                  >
+                    Bulan Ini
+                  </button>
+                  <button
+                    type="button"
+                    onClick={setPeriodBulanLalu}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg border-2 bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-700 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
+                  >
+                    Bulan Lalu
+                  </button>
+                </div>
+                <div className="h-6 w-px bg-slate-200" aria-hidden="true" />
+                <div className="flex items-center gap-2">
+                  <label htmlFor="report-period" className="text-xs font-medium text-slate-500">Pilih bulan:</label>
+                  <select
+                    id="report-period"
+                    value={reportPeriod}
+                    onChange={e => setReportPeriod(e.target.value)}
+                    className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 font-medium text-slate-700 cursor-pointer"
+                    aria-label="Pilih periode laporan"
+                  >
+                    {availableMonths.map(m => (
+                      <option key={m} value={m}>{fmtBulanTahun(m)}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
+            </Section>
+
+            {/* ─── KPI ROW — 4 cards: Pemasukan / Pengeluaran / Laba / Margin ─ */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
+              <StatCard
+                label="Pemasukan"
+                value={`Rp ${fmt(reportPemasukan)}`}
+                hint={
+                  deltaPemasukan == null
+                    ? `${subPemasukan.length} sub-kategori`
+                    : <span className={deltaPemasukan >= 0 ? 'text-emerald-600' : 'text-red-600'}>
+                        {deltaPemasukan >= 0 ? '▲' : '▼'} {Math.abs(deltaPemasukan).toFixed(1)}% vs bulan lalu
+                      </span>
+                }
+                accent="emerald"
+                variant="full"
+                icon={TrendingUp}
+                iconBg="bg-emerald-100 text-emerald-600"
+              />
+              <StatCard
+                label="Pengeluaran"
+                value={`Rp ${fmt(reportPengeluaran)}`}
+                hint={
+                  deltaPengeluaran == null
+                    ? `${subPengeluaran.length} sub-kategori`
+                    : <span className={deltaPengeluaran <= 0 ? 'text-emerald-600' : 'text-red-600'}>
+                        {deltaPengeluaran >= 0 ? '▲' : '▼'} {Math.abs(deltaPengeluaran).toFixed(1)}% vs bulan lalu
+                      </span>
+                }
+                accent="red"
+                variant="full"
+                icon={TrendingDown}
+                iconBg="bg-red-100 text-red-600"
+              />
+              <StatCard
+                label={reportLaba >= 0 ? 'Laba Bersih' : 'Rugi Bersih'}
+                value={`${reportLaba >= 0 ? '+' : '−'} Rp ${fmt(Math.abs(reportLaba))}`}
+                hint={
+                  deltaLaba == null
+                    ? (reportLaba >= 0 ? 'Untung periode ini' : 'Rugi periode ini')
+                    : <span className={deltaLaba >= 0 ? 'text-emerald-600' : 'text-red-600'}>
+                        {deltaLaba >= 0 ? '▲' : '▼'} {Math.abs(deltaLaba).toFixed(1)}% vs bulan lalu
+                      </span>
+                }
+                accent={reportLaba >= 0 ? 'indigo' : 'amber'}
+                variant="full"
+                icon={Wallet}
+                iconBg={reportLaba >= 0 ? 'bg-indigo-100 text-indigo-600' : 'bg-amber-100 text-amber-700'}
+              />
+              <StatCard
+                label="Margin Laba"
+                value={`${marginLaba.toFixed(1)}%`}
+                hint={
+                  marginLaba >= 20 ? 'Sehat — di atas 20%' :
+                  marginLaba >= 10 ? 'Cukup — 10–20%' :
+                  marginLaba >= 0  ? 'Tipis — di bawah 10%' :
+                                      'Negatif — periode rugi'
+                }
+                accent={marginLaba >= 20 ? 'emerald' : marginLaba >= 10 ? 'indigo' : marginLaba >= 0 ? 'amber' : 'red'}
+                variant="full"
+                icon={Percent}
+                iconBg="bg-slate-100 text-slate-600"
+              />
             </div>
 
-            {/* KPI Bulan Dipilih */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
-              <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 border-l-4 border-l-emerald-500">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Total Pemasukan</p>
-                <p className="text-2xl font-black text-emerald-600">Rp {fmt(reportPemasukan)}</p>
-                <p className="text-xs text-slate-400 mt-1">{subPemasukan.length} sub-kategori</p>
+            {/* ─── ESTIMASI PAJAK BANNER — kontekstual berdasarkan jenis usaha ─ */}
+            <Section
+              title="Estimasi Pajak Periode Ini"
+              icon={Calculator}
+              accent="amber"
+              rightSlot={
+                <span className="text-tiny text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                  {bengkelSettings.jenisUsaha === 'UMKM_PP55' ? 'UMKM · PPh Final 0,5%'
+                    : bengkelSettings.jenisUsaha === 'Badan' ? 'Badan · PPh 22%'
+                    : `Tarif Manual ${bengkelSettings.tarifPphManual ?? 0}%`}
+                </span>
+              }
+              bodyClassName="p-4"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+                  <p className="text-2xs font-semibold text-amber-700 uppercase tracking-wider">PPh Estimasi (Bulan)</p>
+                  <p className="text-lg font-black text-amber-800 mt-0.5">Rp {fmt(labaRugiPeriode.pphTerutang)}</p>
+                  <p className="text-tiny text-amber-700/70 mt-0.5 truncate" title={labaRugiPeriode.pphInfo}>
+                    {labaRugiPeriode.pphInfo}
+                  </p>
+                </div>
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2.5">
+                  <p className="text-2xs font-semibold text-indigo-700 uppercase tracking-wider">PPh Estimasi (Tahun {reportPeriod.slice(0, 4)})</p>
+                  <p className="text-lg font-black text-indigo-800 mt-0.5">Rp {fmt(labaRugiTahun.pphTerutang)}</p>
+                  <p className="text-tiny text-indigo-700/70 mt-0.5">Akumulasi sejak Januari</p>
+                </div>
+                <div className="bg-sky-50 border border-sky-200 rounded-lg px-3 py-2.5">
+                  <p className="text-2xs font-semibold text-sky-700 uppercase tracking-wider">Utang PPN Keluaran</p>
+                  <p className="text-lg font-black text-sky-800 mt-0.5">Rp {fmt(utangPpnPeriode)}</p>
+                  <p className="text-tiny text-sky-700/70 mt-0.5">Dari WO ber-PPN bulan ini</p>
+                </div>
               </div>
-              <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 border-l-4 border-l-red-500">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Total Pengeluaran</p>
-                <p className="text-2xl font-black text-red-600">Rp {fmt(reportPengeluaran)}</p>
-                <p className="text-xs text-slate-400 mt-1">{subPengeluaran.length} sub-kategori</p>
-              </div>
-              <div className={`bg-white border border-slate-200 rounded-xl shadow-sm p-4 border-l-4 ${reportLaba >= 0 ? 'border-l-indigo-500' : 'border-l-orange-500'}`}>
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Laba Bersih</p>
-                <p className={`text-2xl font-black ${reportLaba >= 0 ? 'text-indigo-700' : 'text-orange-600'}`}>
-                  {reportLaba >= 0 ? '+' : '-'} Rp {fmt(Math.abs(reportLaba))}
+              {bengkelSettings.modalAwal === 0 && bengkelSettings.saldoKasAwal === 0 && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded mt-3 px-3 py-2 flex items-start gap-2">
+                  <span className="font-bold">ℹ️</span>
+                  <span>Lengkapi <b>Modal Awal</b> &amp; <b>Saldo Kas Awal</b> di Pengaturan → Akuntansi &amp; Pajak agar Neraca yang dicetak <i>balance</i>.</span>
                 </p>
-                <p className="text-xs text-slate-400 mt-1">{reportLaba >= 0 ? 'Laba periode ini' : 'Rugi periode ini'}</p>
-              </div>
-            </div>
+              )}
+            </Section>
 
+            {/* ─── BREAKDOWN 2-KOLOM — Pemasukan vs Pengeluaran ─────────────── */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Breakdown Pemasukan */}
-              <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-                <h3 className="text-sm font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
-                  Rincian Pemasukan — {reportLabel}
-                </h3>
+              <Section
+                title={`Rincian Pemasukan — ${reportLabel}`}
+                icon={TrendingUp}
+                accent="emerald"
+                rightSlot={<span className="text-xs font-bold text-emerald-700">Rp {fmt(reportPemasukan)}</span>}
+                bodyClassName="p-5"
+              >
                 {subPemasukan.length === 0 ? (
-                  <p className="text-sm text-slate-400 text-center py-4">Tidak ada pemasukan bulan ini.</p>
+                  <EmptyState
+                    icon={TrendingUp}
+                    title="Tidak ada pemasukan"
+                    description={`Belum ada transaksi pemasukan di ${reportLabel}.`}
+                  />
                 ) : (
                   <div className="space-y-3">
                     {subPemasukan.map(({ sub, total }) => {
                       const pct = reportPemasukan > 0 ? (total / reportPemasukan) * 100 : 0;
                       return (
                         <div key={sub}>
-                          <div className="flex justify-between text-xs mb-1">
-                            <span className="font-medium text-slate-600">{sub}</span>
-                            <span className="font-semibold text-slate-800">Rp {fmt(total)} <span className="text-slate-400 font-normal">({pct.toFixed(0)}%)</span></span>
+                          <div className="flex justify-between text-xs mb-1 gap-2">
+                            <span className="font-medium text-slate-600 truncate">{sub}</span>
+                            <span className="font-semibold text-slate-800 whitespace-nowrap tabular-nums">
+                              Rp {fmt(total)} <span className="text-slate-400 font-normal">({pct.toFixed(0)}%)</span>
+                            </span>
                           </div>
                           <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                             <div className="h-full bg-emerald-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
@@ -811,31 +1007,34 @@ export default function Finance() {
                         </div>
                       );
                     })}
-                    <div className="pt-2 border-t border-slate-100 flex justify-between text-sm font-bold">
-                      <span className="text-slate-600">Total</span>
-                      <span className="text-emerald-700">Rp {fmt(reportPemasukan)}</span>
-                    </div>
                   </div>
                 )}
-              </div>
+              </Section>
 
-              {/* Breakdown Pengeluaran */}
-              <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-                <h3 className="text-sm font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full bg-red-500 inline-block" />
-                  Rincian Pengeluaran — {reportLabel}
-                </h3>
+              <Section
+                title={`Rincian Pengeluaran — ${reportLabel}`}
+                icon={TrendingDown}
+                accent="red"
+                rightSlot={<span className="text-xs font-bold text-red-700">Rp {fmt(reportPengeluaran)}</span>}
+                bodyClassName="p-5"
+              >
                 {subPengeluaran.length === 0 ? (
-                  <p className="text-sm text-slate-400 text-center py-4">Tidak ada pengeluaran bulan ini.</p>
+                  <EmptyState
+                    icon={TrendingDown}
+                    title="Tidak ada pengeluaran"
+                    description={`Belum ada transaksi pengeluaran di ${reportLabel}.`}
+                  />
                 ) : (
                   <div className="space-y-3">
                     {subPengeluaran.map(({ sub, total }) => {
                       const pct = reportPengeluaran > 0 ? (total / reportPengeluaran) * 100 : 0;
                       return (
                         <div key={sub}>
-                          <div className="flex justify-between text-xs mb-1">
-                            <span className="font-medium text-slate-600">{sub}</span>
-                            <span className="font-semibold text-slate-800">Rp {fmt(total)} <span className="text-slate-400 font-normal">({pct.toFixed(0)}%)</span></span>
+                          <div className="flex justify-between text-xs mb-1 gap-2">
+                            <span className="font-medium text-slate-600 truncate">{sub}</span>
+                            <span className="font-semibold text-slate-800 whitespace-nowrap tabular-nums">
+                              Rp {fmt(total)} <span className="text-slate-400 font-normal">({pct.toFixed(0)}%)</span>
+                            </span>
                           </div>
                           <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                             <div className="h-full bg-red-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
@@ -843,99 +1042,165 @@ export default function Finance() {
                         </div>
                       );
                     })}
-                    <div className="pt-2 border-t border-slate-100 flex justify-between text-sm font-bold">
-                      <span className="text-slate-600">Total</span>
-                      <span className="text-red-700">Rp {fmt(reportPengeluaran)}</span>
-                    </div>
                   </div>
                 )}
-              </div>
+              </Section>
             </div>
 
-            {/* Tren 6 Bulan */}
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-              <h3 className="text-sm font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100 flex items-center justify-between">
-                <span>Tren Laba Rugi (6 Bulan Terakhir)</span>
-                <div className="flex items-center gap-3 text-xs font-normal text-slate-400">
+            {/* ─── TREN 6 BULAN — bar chart dengan highlight bulan dipilih ──── */}
+            <Section
+              title="Tren Laba Rugi (6 Bulan Terakhir)"
+              icon={BarChart2}
+              accent="indigo"
+              rightSlot={
+                <div className="flex items-center gap-3 text-2xs text-slate-500">
                   <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-emerald-500 inline-block" /> Pemasukan</span>
                   <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-red-500 inline-block" /> Pengeluaran</span>
                 </div>
-              </h3>
-              <div className="h-48 flex items-end gap-4">
+              }
+              bodyClassName="p-5"
+            >
+              <div className="h-48 flex items-end gap-3 pt-6">
                 {last6Months.map((m, i) => {
                   const pemH = (m.pem / maxChartValue) * 100;
                   const pengH = (m.peng / maxChartValue) * 100;
                   const net = m.pem - m.peng;
+                  // Cek apakah bulan ini = bulan yang dipilih di reportPeriod
+                  const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+                  const monthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                  const isSelected = monthStr === reportPeriod;
                   return (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end group relative">
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setReportPeriod(monthStr)}
+                      title={`Pilih ${m.label}`}
+                      className={`flex-1 flex flex-col items-center gap-1 h-full justify-end group relative rounded-md px-1 py-1 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 ${
+                        isSelected ? 'bg-indigo-50 ring-2 ring-indigo-300' : 'hover:bg-slate-50'
+                      }`}
+                    >
                       <div className="absolute -top-14 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white text-2xs py-1.5 px-2.5 rounded whitespace-nowrap pointer-events-none z-10 shadow-lg">
                         <p className="text-emerald-300 font-bold">+Rp {fmt(m.pem)}</p>
-                        <p className="text-red-300 font-bold">-Rp {fmt(m.peng)}</p>
-                        <p className={`font-bold border-t border-slate-600 mt-1 pt-1 ${net >= 0 ? 'text-indigo-300' : 'text-orange-300'}`}>Laba: Rp {fmt(net)}</p>
+                        <p className="text-red-300 font-bold">−Rp {fmt(m.peng)}</p>
+                        <p className={`font-bold border-t border-slate-600 mt-1 pt-1 ${net >= 0 ? 'text-indigo-300' : 'text-orange-300'}`}>
+                          Laba: {net < 0 ? '−' : ''}Rp {fmt(Math.abs(net))}
+                        </p>
                       </div>
-                      <div className="flex items-end gap-0.5 w-full h-36">
+                      <div className="flex items-end gap-0.5 w-full h-32">
                         <div className="flex-1 bg-emerald-500 rounded-t hover:bg-emerald-400 transition-colors" style={{ height: `${pemH}%`, minHeight: m.pem > 0 ? '3px' : '0' }} />
                         <div className="flex-1 bg-red-500 rounded-t hover:bg-red-400 transition-colors" style={{ height: `${pengH}%`, minHeight: m.peng > 0 ? '3px' : '0' }} />
                       </div>
-                      <span className="text-2xs font-medium text-slate-400">{m.label}</span>
+                      <span className={`text-2xs font-medium ${isSelected ? 'text-indigo-700 font-bold' : 'text-slate-400'}`}>{m.label}</span>
                       <span className={`text-3xs font-bold px-1.5 py-0.5 rounded-full ${net >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                        {net >= 0 ? '+' : ''}Rp {fmt(net)}
+                        {net >= 0 ? '+' : '−'}Rp {fmt(Math.abs(net))}
                       </span>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
-            </div>
+              <p className="text-tiny text-slate-400 mt-3 text-center">Klik bar untuk pilih bulan yang ingin dilihat.</p>
+            </Section>
 
-            {/* Tabel Rincian Transaksi Periode */}
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-              <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="text-sm font-bold text-slate-700">Rincian Transaksi — {reportLabel}</h3>
-                <span className="text-xs text-slate-400">{reportTrxSorted.length} transaksi</span>
-              </div>
+            {/* ─── TABEL RINCIAN TRANSAKSI — dengan search ────────────────── */}
+            <Section
+              title={`Rincian Transaksi — ${reportLabel}`}
+              icon={FileText}
+              accent="indigo"
+              rightSlot={
+                <span className="text-tiny text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                  {reportTrxFiltered.length} dari {reportTrxSorted.length}
+                </span>
+              }
+              bodyClassName="p-0"
+            >
               {reportTrxSorted.length === 0 ? (
-                <div className="py-10 text-center text-slate-400 text-sm">Tidak ada transaksi pada periode ini.</div>
+                <div className="p-8">
+                  <EmptyState
+                    icon={FileText}
+                    title="Tidak ada transaksi"
+                    description={`Belum ada transaksi tercatat di ${reportLabel}.`}
+                    action={
+                      <Button variant="primary" size="md" onClick={() => { setActiveTab('table'); }}>
+                        <Plus className="w-4 h-4" /> Catat Transaksi
+                      </Button>
+                    }
+                  />
+                </div>
               ) : (
-                <div className="overflow-auto max-h-64">
-                  <table className="w-full text-sm border-collapse min-w-[700px]">
-                    <thead className="bg-slate-50 sticky top-0">
-                      <tr className="border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        <th className="px-4 py-2 text-left w-28">Tanggal</th>
-                        <th className="px-4 py-2 text-left w-28">Kategori</th>
-                        <th className="px-4 py-2 text-left w-40">Sub-Kategori</th>
-                        <th className="px-4 py-2 text-left">Deskripsi</th>
-                        <th className="px-4 py-2 text-right w-36">Nominal</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {reportTrxSorted.map((t, i) => (
-                        <tr key={t.id} className={`border-b border-slate-100 ${i % 2 === 1 ? 'bg-slate-50/50' : ''}`}>
-                          <td className="px-4 py-2 text-slate-500 text-xs">{t.tanggal}</td>
-                          <td className="px-4 py-2">
-                            <span className={`text-2xs font-bold px-2 py-0.5 rounded-full ${t.nominal > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                              {t.kategori}
-                            </span>
+                <>
+                  {/* Search bar */}
+                  <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-3">
+                    <div className="relative flex-1 max-w-sm">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" aria-hidden="true" />
+                      <input
+                        type="search"
+                        value={reportSearch}
+                        onChange={e => setReportSearch(e.target.value)}
+                        placeholder="Cari deskripsi, kategori, nominal..."
+                        aria-label="Cari di rincian transaksi"
+                        className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
+                      />
+                    </div>
+                    {reportSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setReportSearch('')}
+                        className="text-xs text-slate-500 hover:text-slate-700"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="overflow-auto max-h-[420px]">
+                    <table className="w-full text-sm border-collapse min-w-[700px]">
+                      <thead className="bg-slate-50 sticky top-0" style={{ zIndex: 'var(--z-sticky)' }}>
+                        <tr className="border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                          <th className="px-4 py-2.5 text-left w-28">Tanggal</th>
+                          <th className="px-4 py-2.5 text-left w-28">Kategori</th>
+                          <th className="px-4 py-2.5 text-left w-40">Sub-Kategori</th>
+                          <th className="px-4 py-2.5 text-left">Deskripsi</th>
+                          <th className="px-4 py-2.5 text-right w-36">Nominal</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reportTrxFiltered.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="py-10 text-center text-slate-400 text-sm">
+                              Tidak ada hasil untuk "<b>{reportSearch}</b>".
+                            </td>
+                          </tr>
+                        ) : reportTrxFiltered.map((t, i) => (
+                          <tr key={t.id} className={`border-b border-slate-100 hover:bg-indigo-50/40 transition-colors ${i % 2 === 1 ? 'bg-slate-50/40' : ''}`}>
+                            <td className="px-4 py-2 text-slate-500 text-xs whitespace-nowrap">{fmtTanggalPendekTahun(t.tanggal)}</td>
+                            <td className="px-4 py-2">
+                              <span className={`text-2xs font-bold px-2 py-0.5 rounded-full ${t.nominal > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                {t.kategori}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2 text-xs text-slate-500">{t.subKategori || <span className="text-slate-300 italic">—</span>}</td>
+                            <td className="px-4 py-2 text-slate-700 text-xs">{t.deskripsi}</td>
+                            <td className={`px-4 py-2 text-right font-semibold text-xs tabular-nums whitespace-nowrap ${t.nominal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                              {t.nominal >= 0 ? '+' : '−'} Rp {fmt(Math.abs(t.nominal))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-slate-50 border-t-2 border-slate-200 sticky bottom-0">
+                        <tr>
+                          <td colSpan={4} className="px-4 py-2.5 text-right text-xs font-bold text-slate-600">
+                            Total Laba Bersih ({reportLabel}):
                           </td>
-                          <td className="px-4 py-2 text-xs text-slate-500">{t.subKategori || '-'}</td>
-                          <td className="px-4 py-2 text-slate-700 text-xs">{t.deskripsi}</td>
-                          <td className={`px-4 py-2 text-right font-semibold text-xs ${t.nominal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                            {t.nominal >= 0 ? '+' : '-'} Rp {fmt(Math.abs(t.nominal))}
+                          <td className={`px-4 py-2.5 text-right font-black text-sm tabular-nums whitespace-nowrap ${reportLaba >= 0 ? 'text-indigo-700' : 'text-orange-600'}`}>
+                            {reportLaba >= 0 ? '+' : '−'} Rp {fmt(Math.abs(reportLaba))}
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                    <tfoot className="bg-slate-50 border-t-2 border-slate-200">
-                      <tr>
-                        <td colSpan={4} className="px-4 py-2 text-right text-xs font-bold text-slate-600">Total Laba Bersih:</td>
-                        <td className={`px-4 py-2 text-right font-black text-sm ${reportLaba >= 0 ? 'text-indigo-700' : 'text-orange-600'}`}>
-                          {reportLaba >= 0 ? '+' : '-'} Rp {fmt(Math.abs(reportLaba))}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
+                      </tfoot>
+                    </table>
+                  </div>
+                </>
               )}
-            </div>
+            </Section>
           </div>
         )}
 
