@@ -58,7 +58,9 @@ jobs:
           if [ "$missing" = "1" ]; then exit 1; fi
 
       - name: Install Vercel CLI
-        run: npm install --global vercel@39
+        # Vercel API butuh CLI ≥ 47.2.2 (per error log 2026-05).
+        # Pakai @latest supaya tidak ketinggalan lagi kalau ada bump endpoint berikutnya.
+        run: npm install --global vercel@latest
 
       - name: Vercel API — diagnostik raw (token + project + teams)
         id: discover
