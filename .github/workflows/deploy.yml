@@ -48,17 +48,12 @@ jobs:
           HOST=$(printf "%s" "$SUPABASE_DB_URL" | sed -E 's|.*@([^:/]+).*|\1|')
           echo "Detected host: $HOST"
           if printf "%s" "$HOST" | grep -qE '^db\..*\.supabase\.co$'; then
-            cat <<'EOF'
-::error::Pakai direct connection (db.*.supabase.co) — IPv6-only, akan gagal "network is unreachable" dari GitHub Actions runner.
-
-GANTI ke session pooler. Format yang benar:
-  postgresql://postgres.PROJECT_REF:PASSWORD@aws-X-REGION.pooler.supabase.com:5432/postgres
-
-Untuk project ini contohnya:
-  postgresql://postgres.kcyfkjddgbjvjgdoojms:PASSWORD@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres
-
-(Cara cepat: ambil URL transaction pooler dari Supabase Dashboard, ganti port 6543 → 5432.)
-EOF
+            echo "::error::Pakai direct connection (db.*.supabase.co) — IPv6-only, akan gagal 'network is unreachable' dari GitHub Actions runner."
+            echo "  GANTI ke session pooler. Format yang benar:"
+            echo "    postgresql://postgres.PROJECT_REF:PASSWORD@aws-X-REGION.pooler.supabase.com:5432/postgres"
+            echo "  Untuk project ini:"
+            echo "    postgresql://postgres.kcyfkjddgbjvjgdoojms:PASSWORD@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres"
+            echo "  Cara cepat: ambil URL transaction pooler dari Supabase Dashboard, ganti port 6543 -> 5432."
             exit 1
           fi
 
