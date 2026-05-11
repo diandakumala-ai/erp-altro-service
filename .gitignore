@@ -32,3 +32,6 @@ dist-ssr
 .supabase/
 
 .vercel
+
+# Claude Code internal (worktrees, local settings)
+.claude/

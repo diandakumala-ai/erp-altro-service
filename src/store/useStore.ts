@@ -230,6 +230,54 @@ export function saveBengkelSettings(s: BengkelSettings): void {
   }
 }
 
+// ─── HELPERS — Derived data (cross-module) ─────────────────────────────────
+
+/**
+ * Hitung ulang `totalWo` untuk setiap customer berdasarkan `workOrders` saat ini.
+ *
+ * Cara match WO → customer (case-insensitive):
+ *   - `wo.customer` === `customer.perusahaan`, ATAU
+ *   - `wo.customer` === `customer.nama`
+ *
+ * Catatan: relasi WO→Customer saat ini by name-matching (tidak ada FK). Setelah
+ * migrasi B1 (kolom customer_id FK), helper ini akan beralih ke FK eksplisit.
+ * Sampai itu, name match adalah satu-satunya pegangan.
+ *
+ * Optimasi: object identity dipertahankan untuk customer yang totalWo-nya tidak
+ * berubah → bisa di-skip oleh React diff & db.upsert (lihat `persistChangedCustomers`).
+ */
+function withRecomputedTotalWo(customers: Customer[], workOrders: WorkOrder[]): Customer[] {
+  const countByCustomer = new Map<string, number>();
+  for (const wo of workOrders) {
+    const key = (wo.customer || '').trim().toLowerCase();
+    if (!key) continue;
+    countByCustomer.set(key, (countByCustomer.get(key) ?? 0) + 1);
+  }
+  return customers.map(c => {
+    const count =
+      (countByCustomer.get(c.perusahaan.trim().toLowerCase()) ?? 0) +
+      (c.nama && c.nama !== '-' && c.nama.toLowerCase() !== c.perusahaan.toLowerCase()
+        ? (countByCustomer.get(c.nama.trim().toLowerCase()) ?? 0)
+        : 0);
+    return c.totalWo === count ? c : { ...c, totalWo: count };
+  });
+}
+
+/**
+ * Upsert ke Supabase HANYA untuk customer yang totalWo berubah (atau record baru).
+ * Tujuan: hindari spam upsert ke Supabase saat WO mutation tidak menyentuh
+ * customer tertentu.
+ */
+function persistChangedCustomers(prev: Customer[], next: Customer[]): void {
+  const prevById = new Map(prev.map(c => [c.id, c]));
+  for (const c of next) {
+    const old = prevById.get(c.id);
+    if (!old || old.totalWo !== c.totalWo) {
+      db.customers.upsert(c);
+    }
+  }
+}
+
 interface AppState {
   workOrders: WorkOrder[];
   inventory: InventoryItem[];
@@ -823,9 +871,17 @@ export const useStore = create<AppState>((set) => ({
     db.workOrders.upsert(finalWo);
     if (justFinished && isCOD) toast.success(`WO ${finalWo.id} selesai & dicatat ke keuangan.`);
     else if (justFinished) toast.success(`WO ${finalWo.id} selesai. Termin ${finalWo.terminHari} hari — catat pelunasan saat dibayar.`);
+
+    const nextWorkOrders = state.workOrders.map(wo => wo.id === finalWo.id ? finalWo : wo);
+    // Recompute totalWo bila nama customer berubah (atau auto-create customer baru).
+    // Bandingkan dengan state.customers (bukan newCustomers) supaya customer yg baru
+    // di-push juga ke-detect sebagai "berubah" (totalWo 0 → 1) → ke-upsert.
+    const recomputedCustomers = withRecomputedTotalWo(newCustomers, nextWorkOrders);
+    persistChangedCustomers(state.customers, recomputedCustomers);
+
     return {
-      workOrders: state.workOrders.map(wo => wo.id === finalWo.id ? finalWo : wo),
-      customers: newCustomers,
+      workOrders: nextWorkOrders,
+      customers: recomputedCustomers,
       finance: newFinance,
     };
   }),
@@ -843,16 +899,27 @@ export const useStore = create<AppState>((set) => ({
       : wo;
     db.workOrders.upsert(woWithDefaults);
     toast.success(`SPK ${woWithDefaults.id} berhasil dibuat.`);
-    return { workOrders: [...state.workOrders, woWithDefaults], customers: newCustomers };
+
+    const nextWorkOrders = [...state.workOrders, woWithDefaults];
+    const recomputedCustomers = withRecomputedTotalWo(newCustomers, nextWorkOrders);
+    persistChangedCustomers(state.customers, recomputedCustomers);
+
+    return { workOrders: nextWorkOrders, customers: recomputedCustomers };
   }),
   deleteWorkOrder: (id) => {
     db.workOrders.delete(id); // cascade ke boms & services di DB
     toast.info(`WO ${id} telah dihapus.`);
-    set((state) => ({
-      workOrders: state.workOrders.filter(wo => wo.id !== id),
-      boms: state.boms.filter(bom => bom.woId !== id),
-      services: state.services.filter(svc => svc.woId !== id),
-    }));
+    set((state) => {
+      const nextWorkOrders = state.workOrders.filter(wo => wo.id !== id);
+      const recomputedCustomers = withRecomputedTotalWo(state.customers, nextWorkOrders);
+      persistChangedCustomers(state.customers, recomputedCustomers);
+      return {
+        workOrders: nextWorkOrders,
+        boms: state.boms.filter(bom => bom.woId !== id),
+        services: state.services.filter(svc => svc.woId !== id),
+        customers: recomputedCustomers,
+      };
+    });
   },
 
   updateInventory: (updatedItem) => {
@@ -957,7 +1024,14 @@ export const useStore = create<AppState>((set) => ({
 
   updateCustomer: (updatedC) => {
     db.customers.upsert(updatedC);
-    set((state) => ({ customers: state.customers.map(c => c.id === updatedC.id ? updatedC : c) }));
+    set((state) => {
+      const nextCustomers = state.customers.map(c => c.id === updatedC.id ? updatedC : c);
+      // Rename perusahaan/nama mengubah set WO yang match → recompute totalWo
+      // untuk customer ini DAN customer lain yang punya nama serupa.
+      const recomputed = withRecomputedTotalWo(nextCustomers, state.workOrders);
+      persistChangedCustomers(nextCustomers, recomputed);
+      return { customers: recomputed };
+    });
   },
   addCustomer: (c) => {
     db.customers.upsert(c);
