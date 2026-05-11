@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
 import { Users, Wrench, Package, Receipt, Menu, ChevronLeft, Loader2, LayoutDashboard, LogOut, Settings as SettingsIcon } from 'lucide-react'
 import type { Session } from '@supabase/supabase-js'
@@ -190,6 +190,11 @@ function AppShell({ session }: { session: Session }) {
     try { return localStorage.getItem(SIDEBAR_KEY) === '1'; } catch { return false; }
   });
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Stabilkan callback ref — Sidebar punya useEffect yang depend ke ini.
+  // Kalau ref-nya baru setiap render, drawer langsung tertutup setelah dibuka
+  // (parent re-render → new fn ref → effect re-run → onMobileClose dipanggil).
+  const handleMobileClose = useCallback(() => setMobileOpen(false), []);
+  const handleSidebarToggle = useCallback(() => setSidebarCollapsed(v => !v), []);
   useEffect(() => {
     try { localStorage.setItem(SIDEBAR_KEY, sidebarCollapsed ? '1' : '0'); } catch { /* ignore */ }
   }, [sidebarCollapsed]);
@@ -240,10 +245,10 @@ function AppShell({ session }: { session: Session }) {
     init();
   }, [setAllData]);
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     await supabase.auth.signOut();
     toast.info('Berhasil keluar dari sistem.');
-  };
+  }, []);
 
   if (appLoading) {
     return (
@@ -289,9 +294,9 @@ function AppShell({ session }: { session: Session }) {
     <div className="flex h-screen w-full font-sans text-slate-900 overflow-hidden bg-slate-100">
       <Sidebar
         collapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed(v => !v)}
+        onToggle={handleSidebarToggle}
         mobileOpen={mobileOpen}
-        onMobileClose={() => setMobileOpen(false)}
+        onMobileClose={handleMobileClose}
         user={{ email: session.user?.email ?? '' }}
         onLogout={handleLogout}
       />
