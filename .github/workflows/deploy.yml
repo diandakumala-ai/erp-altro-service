@@ -24,20 +24,12 @@ jobs:
       - name: Jalankan migrasi ke Supabase (db push)
         run: |
           supabase db push --db-url "${{ secrets.SUPABASE_DB_URL }}"
-        # SUPABASE_DB_URL format:
-        # postgresql://postgres.[project-ref]:[password]@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres
-        # Ambil dari: Supabase Dashboard → Settings → Database → Connection string → URI
 
   # ─── JOB 2: Deploy ke Vercel ────────────────────────────────
-  # Strategi (avoid vercel pull/build yang sering gagal di CI):
-  # - Link project manual via .vercel/project.json
-  # - Skip `vercel build` di runner — biar Vercel build remotely
-  # - Inject VITE_SUPABASE_* lewat --build-env supaya kebaca saat
-  #   remote build, tidak perlu set manual di Vercel Dashboard.
   vercel-deploy:
     name: Deploy ke Vercel
     runs-on: ubuntu-latest
-    needs: supabase-migration   # Tunggu migration sukses dulu
+    needs: supabase-migration
 
     steps:
       - name: Checkout kode
@@ -65,11 +57,10 @@ jobs:
           done
           if [ "$missing" = "1" ]; then exit 1; fi
 
-      # Pin ke versi yang stabil; @latest kadang regression.
       - name: Install Vercel CLI
         run: npm install --global vercel@39
 
-      - name: Vercel API diagnostics
+      - name: Vercel API diagnostics (cek project bisa diakses)
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -78,40 +69,33 @@ jobs:
           echo "== Vercel CLI version =="
           vercel --version
           echo
-          echo "== Token owner (whoami via API) =="
-          curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v2/user" | python -m json.tool | head -20 || true
+          echo "== Token owner =="
+          curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v2/user" \
+            | jq -r '"username=" + .user.username + " | email=" + .user.email'
           echo
-          echo "== Cek project via API (teamId=ORG_ID) =="
-          curl -sS -o /tmp/proj.json -w "HTTP:%{http_code}\n" \
+          echo "== Cek project dengan teamId =="
+          http_code=$(curl -sS -o /tmp/proj.json -w "%{http_code}" \
             -H "Authorization: Bearer $VERCEL_TOKEN" \
-            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID"
-          echo "Response body:"
-          python -m json.tool < /tmp/proj.json | head -40 || cat /tmp/proj.json
+            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID")
+          echo "HTTP $http_code"
+          jq '{id, name, accountId, framework}' < /tmp/proj.json 2>/dev/null || cat /tmp/proj.json
           echo
-          echo "== Cek project TANPA teamId (cek apa project di personal scope) =="
-          curl -sS -o /tmp/proj2.json -w "HTTP:%{http_code}\n" \
+          echo "== Cek project TANPA teamId (personal scope) =="
+          http_code=$(curl -sS -o /tmp/proj2.json -w "%{http_code}" \
             -H "Authorization: Bearer $VERCEL_TOKEN" \
-            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID"
-          echo "Response body:"
-          python -m json.tool < /tmp/proj2.json | head -40 || cat /tmp/proj2.json
+            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID")
+          echo "HTTP $http_code"
+          jq '{id, name, accountId, framework}' < /tmp/proj2.json 2>/dev/null || cat /tmp/proj2.json
           echo
-          echo "== List projects token bisa akses (personal scope) =="
+          echo "== List projects (personal scope) =="
           curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
-            "https://api.vercel.com/v9/projects?limit=20" | python -c "
-import json,sys
-d=json.load(sys.stdin)
-for p in d.get('projects',[]):
-    print(f\"  - {p.get('name')} | id={p.get('id')} | accountId={p.get('accountId')}\")
-" || true
+            "https://api.vercel.com/v9/projects?limit=20" \
+            | jq -r '.projects[]? | "  - \(.name) | id=\(.id) | accountId=\(.accountId)"'
           echo
-          echo "== List teams token punya akses =="
+          echo "== List teams =="
           curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
-            "https://api.vercel.com/v2/teams" | python -c "
-import json,sys
-d=json.load(sys.stdin)
-for t in d.get('teams',[]):
-    print(f\"  - {t.get('name')} | id={t.get('id')} | slug={t.get('slug')}\")
-" || true
+            "https://api.vercel.com/v2/teams" \
+            | jq -r '.teams[]? | "  - \(.name) | id=\(.id) | slug=\(.slug)"'
 
       - name: Deploy ke Vercel (Production)
         env:
@@ -121,8 +105,6 @@ for t in d.get('teams',[]):
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
-          # Pakai env vars VERCEL_ORG_ID/PROJECT_ID — vercel CLI baca otomatis.
-          # Tidak buat .vercel/project.json manual.
           vercel deploy \
             --prod \
             --yes \
