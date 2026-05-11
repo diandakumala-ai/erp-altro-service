@@ -387,7 +387,7 @@ export default function Finance() {
 
   // Breakdown pemasukan per sub-kategori untuk periode dipilih
   const subPemasukan = useMemo(() => {
-    const subs = ['Pembayaran Servis', 'DP', 'Lain-lain'];
+    const subs = ['DP', 'Pelunasan', 'Lain-lain'];
     return subs.map(sub => ({
       sub,
       total: reportTrx.filter(t => t.nominal > 0 && t.subKategori === sub).reduce((a, b) => a + b.nominal, 0),
@@ -426,6 +426,9 @@ export default function Finance() {
     set.add(reportPeriod);
     return Array.from(set).sort().reverse();
   }, [finance, reportPeriod]);
+
+  // Hover state untuk bar chart (index dari last6Months)
+  const [hoveredBar, setHoveredBar] = useState<number | null>(null);
 
   // Search state untuk tabel rincian transaksi di tab Laporan
   const [reportSearch, setReportSearch] = useState('');
@@ -871,7 +874,7 @@ export default function Finance() {
             </Section>
 
             {/* ─── KPI ROW — 4 cards: Pemasukan / Pengeluaran / Laba / Margin ─ */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 shrink-0">
               <StatCard
                 label="Pemasukan"
                 value={`Rp ${fmt(reportPemasukan)}`}
@@ -1060,12 +1063,36 @@ export default function Finance() {
               }
               bodyClassName="p-5"
             >
-              <div className="h-48 flex items-end gap-3 pt-6">
+              {/* Info panel: tampil saat hover — tidak pakai absolute tooltip agar tidak ter-clip */}
+              <div className={`mb-3 rounded-lg px-4 py-2 flex items-center justify-between gap-4 text-xs transition-all ${
+                hoveredBar !== null
+                  ? 'bg-slate-800 text-white'
+                  : 'bg-slate-50 border border-slate-100 text-slate-400'
+              }`}>
+                {hoveredBar !== null ? (() => {
+                  const m = last6Months[hoveredBar];
+                  const net = m.pem - m.peng;
+                  return (
+                    <>
+                      <span className="font-semibold text-slate-200 shrink-0">{m.label}</span>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 justify-end">
+                        <span className="text-emerald-300 font-semibold">+Rp {fmt(m.pem)}</span>
+                        <span className="text-red-300 font-semibold">−Rp {fmt(m.peng)}</span>
+                        <span className={`font-bold ${net >= 0 ? 'text-indigo-300' : 'text-orange-300'}`}>
+                          Laba: {net < 0 ? '−' : '+'}Rp {fmt(Math.abs(net))}
+                        </span>
+                      </div>
+                    </>
+                  );
+                })() : (
+                  <span className="w-full text-center text-2xs">Arahkan kursor ke bar untuk melihat detail</span>
+                )}
+              </div>
+              <div className="h-40 flex items-end gap-3">
                 {last6Months.map((m, i) => {
                   const pemH = (m.pem / maxChartValue) * 100;
                   const pengH = (m.peng / maxChartValue) * 100;
                   const net = m.pem - m.peng;
-                  // Cek apakah bulan ini = bulan yang dipilih di reportPeriod
                   const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
                   const monthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
                   const isSelected = monthStr === reportPeriod;
@@ -1074,19 +1101,14 @@ export default function Finance() {
                       key={i}
                       type="button"
                       onClick={() => setReportPeriod(monthStr)}
+                      onMouseEnter={() => setHoveredBar(i)}
+                      onMouseLeave={() => setHoveredBar(null)}
                       title={`Pilih ${m.label}`}
-                      className={`flex-1 flex flex-col items-center gap-1 h-full justify-end group relative rounded-md px-1 py-1 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 ${
+                      className={`flex-1 flex flex-col items-center gap-1 h-full justify-end rounded-md px-1 py-1 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 ${
                         isSelected ? 'bg-indigo-50 ring-2 ring-indigo-300' : 'hover:bg-slate-50'
                       }`}
                     >
-                      <div className="absolute -top-14 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white text-2xs py-1.5 px-2.5 rounded whitespace-nowrap pointer-events-none z-10 shadow-lg">
-                        <p className="text-emerald-300 font-bold">+Rp {fmt(m.pem)}</p>
-                        <p className="text-red-300 font-bold">−Rp {fmt(m.peng)}</p>
-                        <p className={`font-bold border-t border-slate-600 mt-1 pt-1 ${net >= 0 ? 'text-indigo-300' : 'text-orange-300'}`}>
-                          Laba: {net < 0 ? '−' : ''}Rp {fmt(Math.abs(net))}
-                        </p>
-                      </div>
-                      <div className="flex items-end gap-0.5 w-full h-32">
+                      <div className="flex items-end gap-0.5 w-full h-28">
                         <div className="flex-1 bg-emerald-500 rounded-t hover:bg-emerald-400 transition-colors" style={{ height: `${pemH}%`, minHeight: m.pem > 0 ? '3px' : '0' }} />
                         <div className="flex-1 bg-red-500 rounded-t hover:bg-red-400 transition-colors" style={{ height: `${pengH}%`, minHeight: m.peng > 0 ? '3px' : '0' }} />
                       </div>
@@ -1098,7 +1120,7 @@ export default function Finance() {
                   );
                 })}
               </div>
-              <p className="text-tiny text-slate-400 mt-3 text-center">Klik bar untuk pilih bulan yang ingin dilihat.</p>
+              <p className="text-tiny text-slate-400 mt-3 text-center">Klik bar untuk memilih periode laporan.</p>
             </Section>
 
             {/* ─── TABEL RINCIAN TRANSAKSI — dengan search ────────────────── */}
