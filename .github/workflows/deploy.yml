@@ -69,49 +69,63 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@39
 
-      - name: Vercel CLI diagnostics
+      - name: Vercel API diagnostics
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          echo "== vercel --version =="
+          echo "== Vercel CLI version =="
           vercel --version
-          echo "== vercel whoami =="
-          vercel whoami --token="$VERCEL_TOKEN"
-          echo "== ORG/PROJECT IDs (first 8 chars) =="
-          echo "ORG_ID prefix: ${VERCEL_ORG_ID:0:8}..."
-          echo "PROJECT_ID prefix: ${VERCEL_PROJECT_ID:0:8}..."
-          echo "== List teams (validate ORG_ID exists) =="
-          vercel teams ls --token="$VERCEL_TOKEN" || true
-
-      - name: Link Vercel project (skip vercel pull)
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: |
-          mkdir -p .vercel
-          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
-          cat .vercel/project.json
+          echo
+          echo "== Token owner (whoami via API) =="
+          curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v2/user" | python -m json.tool | head -20 || true
+          echo
+          echo "== Cek project via API (teamId=ORG_ID) =="
+          curl -sS -o /tmp/proj.json -w "HTTP:%{http_code}\n" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID"
+          echo "Response body:"
+          python -m json.tool < /tmp/proj.json | head -40 || cat /tmp/proj.json
+          echo
+          echo "== Cek project TANPA teamId (cek apa project di personal scope) =="
+          curl -sS -o /tmp/proj2.json -w "HTTP:%{http_code}\n" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID"
+          echo "Response body:"
+          python -m json.tool < /tmp/proj2.json | head -40 || cat /tmp/proj2.json
+          echo
+          echo "== List projects token bisa akses (personal scope) =="
+          curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v9/projects?limit=20" | python -c "
+import json,sys
+d=json.load(sys.stdin)
+for p in d.get('projects',[]):
+    print(f\"  - {p.get('name')} | id={p.get('id')} | accountId={p.get('accountId')}\")
+" || true
+          echo
+          echo "== List teams token punya akses =="
+          curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v2/teams" | python -c "
+import json,sys
+d=json.load(sys.stdin)
+for t in d.get('teams',[]):
+    print(f\"  - {t.get('name')} | id={t.get('id')} | slug={t.get('slug')}\")
+" || true
 
       - name: Deploy ke Vercel (Production)
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
-          set +e
+          # Pakai env vars VERCEL_ORG_ID/PROJECT_ID — vercel CLI baca otomatis.
+          # Tidak buat .vercel/project.json manual.
           vercel deploy \
             --prod \
             --yes \
-            --debug \
             --token="$VERCEL_TOKEN" \
             --build-env "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" \
-            --build-env "VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY" 2>&1 | tee /tmp/vercel-deploy.log
-          rc=${PIPESTATUS[0]}
-          echo "=== Exit code: $rc ==="
-          if [ "$rc" != "0" ]; then
-            echo "=== Last 80 lines of log ==="
-            tail -80 /tmp/vercel-deploy.log
-          fi
-          exit $rc
+            --build-env "VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY"
