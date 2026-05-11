@@ -21,6 +21,39 @@ jobs:
         with:
           version: latest
 
+      - name: Validasi format SUPABASE_DB_URL
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          # Cek format tanpa expose value
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::Secret SUPABASE_DB_URL belum di-set."
+            exit 1
+          fi
+
+          if ! printf "%s" "$SUPABASE_DB_URL" | grep -qE '^postgres(ql)?://'; then
+            echo "::error::SUPABASE_DB_URL harus diawali 'postgresql://' atau 'postgres://'. Format yang benar: postgresql://USER:PASSWORD@HOST:PORT/DATABASE"
+            exit 1
+          fi
+
+          # Ekstrak port (tanpa expose password) — pakai sed
+          PORT=$(printf "%s" "$SUPABASE_DB_URL" | sed -E 's|.*@[^:/]+:([0-9]+)/.*|\1|')
+          echo "Detected port: $PORT"
+          if [ "$PORT" = "6543" ]; then
+            echo "::error::Port 6543 = Transaction Pooler. Tidak support prepared statements yang dipakai Supabase CLI 'db push'. Ganti ke port 5432 (Session Pooler) di GitHub Secret SUPABASE_DB_URL."
+            exit 1
+          fi
+
+          # Cek host pattern — direct connection (db.*.supabase.co) sering IPv6-only,
+          # akan gagal connect dari GitHub Actions runner
+          HOST=$(printf "%s" "$SUPABASE_DB_URL" | sed -E 's|.*@([^:/]+).*|\1|')
+          echo "Detected host: $HOST"
+          if printf "%s" "$HOST" | grep -qE '^db\..*\.supabase\.co$'; then
+            echo "::warning::Pakai direct connection (db.*.supabase.co) — biasanya IPv6-only dan akan gagal dari GitHub Actions. Pakai pooler.supabase.com port 5432 (session pooler) untuk IPv4."
+          fi
+
+          echo "✓ Format SUPABASE_DB_URL lulus validasi"
+
       - name: Jalankan migrasi ke Supabase (db push)
         run: |
           supabase db push --db-url "${{ secrets.SUPABASE_DB_URL }}"
