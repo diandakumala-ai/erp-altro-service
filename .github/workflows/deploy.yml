@@ -28,14 +28,12 @@ jobs:
         # postgresql://postgres.[project-ref]:[password]@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres
         # Ambil dari: Supabase Dashboard → Settings → Database → Connection string → URI
 
-  # ─── JOB 2: Build & Deploy ke Vercel ────────────────────────
-  # Strategi:
-  # - Build LOCAL pakai Vite (npm run build) — env vars di-inject dari GH
-  #   secrets, jadi VITE_SUPABASE_* terbaca saat build.
-  # - Bungkus build output (.vercel/output) via `vercel build --prebuilt`
-  #   handler — TANPA `vercel pull` (sering gagal kalau token/CLI version
-  #   bermasalah). Project link dibuat manual via .vercel/project.json.
-  # - Deploy ke Vercel pakai `vercel deploy --prebuilt --prod`.
+  # ─── JOB 2: Deploy ke Vercel ────────────────────────────────
+  # Strategi (avoid vercel pull/build yang sering gagal di CI):
+  # - Link project manual via .vercel/project.json
+  # - Skip `vercel build` di runner — biar Vercel build remotely
+  # - Inject VITE_SUPABASE_* lewat --build-env supaya kebaca saat
+  #   remote build, tidak perlu set manual di Vercel Dashboard.
   vercel-deploy:
     name: Deploy ke Vercel
     runs-on: ubuntu-latest
@@ -49,7 +47,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Cek required secrets
         env:
@@ -68,9 +65,6 @@ jobs:
           done
           if [ "$missing" = "1" ]; then exit 1; fi
 
-      - name: Install dependencies
-        run: npm ci
-
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
@@ -82,17 +76,17 @@ jobs:
           mkdir -p .vercel
           printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
 
-      - name: Build dengan Vercel (inject env vars dari GH secrets)
-        run: vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+      - name: Deploy ke Vercel (Production)
         env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-
-      - name: Deploy ke Vercel (Production — prebuilt)
         run: |
           vercel deploy \
-            --prebuilt \
             --prod \
             --yes \
-            --token="${{ secrets.VERCEL_TOKEN }}" \
-            --no-clipboard
+            --token="$VERCEL_TOKEN" \
+            --no-clipboard \
+            --archive=tgz \
+            --build-env "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" \
+            --build-env "VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY"
