@@ -29,6 +29,13 @@ jobs:
         # Ambil dari: Supabase Dashboard → Settings → Database → Connection string → URI
 
   # ─── JOB 2: Build & Deploy ke Vercel ────────────────────────
+  # Strategi:
+  # - Build LOCAL pakai Vite (npm run build) — env vars di-inject dari GH
+  #   secrets, jadi VITE_SUPABASE_* terbaca saat build.
+  # - Bungkus build output (.vercel/output) via `vercel build --prebuilt`
+  #   handler — TANPA `vercel pull` (sering gagal kalau token/CLI version
+  #   bermasalah). Project link dibuat manual via .vercel/project.json.
+  # - Deploy ke Vercel pakai `vercel deploy --prebuilt --prod`.
   vercel-deploy:
     name: Deploy ke Vercel
     runs-on: ubuntu-latest
@@ -44,25 +51,48 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install Vercel CLI
-        run: npm install --global vercel@latest
-
-      - name: Pull Vercel project settings
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Cek required secrets
         env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-
-      - name: Build dengan Vercel (inject env vars)
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
-        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          missing=0
+          for v in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Secret $v belum di-set di GitHub repo settings."
+              missing=1
+            fi
+          done
+          if [ "$missing" = "1" ]; then exit 1; fi
 
-      - name: Deploy ke Vercel (Production — prebuilt)
-        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Link Vercel project (skip vercel pull)
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+
+      - name: Build dengan Vercel (inject env vars dari GH secrets)
+        run: vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Deploy ke Vercel (Production — prebuilt)
+        run: |
+          vercel deploy \
+            --prebuilt \
+            --prod \
+            --yes \
+            --token="${{ secrets.VERCEL_TOKEN }}" \
+            --no-clipboard
