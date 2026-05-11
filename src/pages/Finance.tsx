@@ -933,8 +933,97 @@ export default function Finance() {
                   <p className="text-sm font-medium text-emerald-600">Tidak ada piutang. Semua WO sudah lunas.</p>
                 </div>
               ) : (
-                <div className="overflow-auto">
-                  <table className="w-full text-sm border-collapse min-w-[1100px]">
+                <>
+                  {/* ─── MOBILE: Card list (<md) ─── Owner persona view utama.
+                       Sisa tagihan & status overdue paling prominent. Tap "Catat Lunas"
+                       langsung record pelunasan tanpa buka form. */}
+                  <div className="md:hidden p-3 space-y-2">
+                    {piutangList.map(({ wo, info }) => {
+                      const bgClass = info.isOverdue
+                        ? 'bg-red-50 border-red-200'
+                        : info.isDueSoon
+                        ? 'bg-amber-50 border-amber-200'
+                        : 'bg-white border-slate-200';
+                      return (
+                        <div key={wo.id} className={`border rounded-xl p-3 shadow-sm ${bgClass}`}>
+                          {/* Top: status badge + WO id */}
+                          <div className="flex items-center justify-between gap-2 mb-1.5">
+                            <span className={`inline-block px-2 py-0.5 rounded-full text-2xs uppercase tracking-wider font-bold border ${
+                              info.status === 'Belum Bayar' ? 'bg-red-100 text-red-700 border-red-300' :
+                              info.status === 'DP' ? 'bg-amber-100 text-amber-700 border-amber-300' :
+                              'bg-emerald-100 text-emerald-700 border-emerald-300'
+                            }`}>{info.status}</span>
+                            <span className="font-mono text-2xs text-slate-500">{wo.id}</span>
+                          </div>
+                          {/* Customer + item */}
+                          <p className="font-semibold text-sm text-slate-800 truncate">{wo.customer}</p>
+                          <p className="text-xs text-slate-500 truncate mt-0.5">{wo.merk || '—'}</p>
+                          {/* Sisa Tagihan — prominent */}
+                          <div className="mt-3 pt-3 border-t border-slate-200/60">
+                            <p className="text-2xs font-semibold uppercase tracking-wider text-slate-500">Sisa Tagihan</p>
+                            <p className="text-xl font-black text-amber-700 mt-0.5">Rp {fmt(info.sisaTagihan)}</p>
+                            {info.totalBayar > 0 && (
+                              <p className="text-2xs text-emerald-700 mt-0.5">
+                                Sudah dibayar Rp {fmt(info.totalBayar)}
+                              </p>
+                            )}
+                          </div>
+                          {/* Jatuh tempo */}
+                          <div className="mt-2 text-xs">
+                            {info.jatuhTempo ? (
+                              <div className={`font-medium ${
+                                info.isOverdue ? 'text-red-700' :
+                                info.isDueSoon ? 'text-amber-700' : 'text-slate-700'
+                              }`}>
+                                {info.isOverdue && info.hariKeJatuhTempo != null && (
+                                  <>🔴 Lewat <b>{Math.abs(info.hariKeJatuhTempo)} hari</b> · </>
+                                )}
+                                {!info.isOverdue && info.isDueSoon && info.hariKeJatuhTempo != null && (
+                                  <>⏰ {info.hariKeJatuhTempo === 0 ? 'Hari ini' : `${info.hariKeJatuhTempo} hari lagi`} · </>
+                                )}
+                                {!info.isOverdue && !info.isDueSoon && info.hariKeJatuhTempo != null && (
+                                  <>{info.hariKeJatuhTempo} hari lagi · </>
+                                )}
+                                Jatuh tempo {fmtTanggalPendekTahun(info.jatuhTempo)}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic">
+                                {(wo.terminHari ?? 0) === 0 ? 'COD — bayar di tempat' : 'Invoice belum terbit'}
+                              </span>
+                            )}
+                          </div>
+                          {/* Action — touch target 44px high, full-width */}
+                          <button
+                            type="button"
+                            title="Catat pelunasan piutang ini"
+                            onClick={() => {
+                              let max = 0;
+                              finance.forEach(t => { const n = parseInt(t.id.split('-').at(-1)!, 10); if (!isNaN(n) && n > max) max = n; });
+                              const newId = `TRX-${String(max + 1).padStart(3, '0')}`;
+                              addFinance({
+                                id: newId,
+                                tanggal: new Date().toISOString().split('T')[0],
+                                kategori: 'Pemasukan',
+                                subKategori: 'Pelunasan',
+                                deskripsi: `Pelunasan - ${wo.id} (${wo.customer})`,
+                                nominal: info.sisaTagihan,
+                                catatan: '',
+                                woId: wo.id,
+                              });
+                              setActiveTab('table');
+                            }}
+                            className="mt-3 w-full min-h-[44px] px-3 py-2 text-sm font-semibold bg-emerald-600 text-white border border-emerald-700 rounded-lg hover:bg-emerald-700 active:bg-emerald-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+                          >
+                            ✓ Catat Lunas — Rp {fmt(info.sisaTagihan)}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* ─── DESKTOP: Table (md+) ─── */}
+                  <div className="hidden md:block overflow-auto">
+                    <table className="w-full text-sm border-collapse min-w-[1100px]">
                     <thead className="bg-slate-50 sticky top-0" style={{ zIndex: 'var(--z-sticky)' }}>
                       <tr className="border-b border-slate-200">
                         <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">No. WO</th>
@@ -1026,6 +1115,7 @@ export default function Finance() {
                     </tfoot>
                   </table>
                 </div>
+                </>
               )}
             </div>
           </div>
