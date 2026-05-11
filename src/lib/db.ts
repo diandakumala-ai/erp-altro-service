@@ -18,6 +18,7 @@ import type {
 const toDbWo = (w: WorkOrder) => ({
   id: w.id,
   customer: w.customer,
+  customer_id: w.customerId ?? null,  // FK eksplisit (migration 20260511010000)
   merk: w.merk,
   capacity: w.capacity,
   keluhan: w.keluhan,
@@ -39,6 +40,7 @@ const toDbWo = (w: WorkOrder) => ({
 const fromDbWo = (r: Record<string, unknown>): WorkOrder => ({
   id: r.id as string,
   customer: r.customer as string,
+  customerId: (r.customer_id as string | null) ?? undefined,
   merk: r.merk as string,
   capacity: r.capacity as string,
   keluhan: r.keluhan as string,

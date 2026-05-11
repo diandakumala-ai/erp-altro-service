@@ -4,7 +4,18 @@ import { toast } from '../lib/toast';
 
 export interface WorkOrder {
   id: string;
+  /**
+   * Denormalized customer display name. Dipakai langsung untuk cetak SPK/Invoice
+   * tanpa harus join. Sumber kebenaran untuk display.
+   */
   customer: string;
+  /**
+   * FK eksplisit ke customers.id (migration 20260511010000). NULL bila customer
+   * belum auto-create atau belum ter-backfill. Dipakai untuk join akurat & untuk
+   * keep link tetap valid saat customer di-rename. Display tetap pakai field
+   * `customer` di atas.
+   */
+  customerId?: string;
   merk: string;
   /** Deskripsi/spesifikasi item (sebelumnya bernama "Kapasitas"). DB column: capacity. */
   capacity: string;
@@ -235,32 +246,76 @@ export function saveBengkelSettings(s: BengkelSettings): void {
 /**
  * Hitung ulang `totalWo` untuk setiap customer berdasarkan `workOrders` saat ini.
  *
- * Cara match WO → customer (case-insensitive):
- *   - `wo.customer` === `customer.perusahaan`, ATAU
- *   - `wo.customer` === `customer.nama`
+ * Strategi match (prioritas tinggi → rendah):
+ *   1. `wo.customerId` === `customer.id` (FK eksplisit, post-migrasi 20260511010000)
+ *   2. `wo.customer` (case-insensitive) === `customer.perusahaan` ATAU `customer.nama`
  *
- * Catatan: relasi WO→Customer saat ini by name-matching (tidak ada FK). Setelah
- * migrasi B1 (kolom customer_id FK), helper ini akan beralih ke FK eksplisit.
- * Sampai itu, name match adalah satu-satunya pegangan.
+ * Setelah backfill jalan, semua WO existing akan punya customerId. WO baru yang
+ * dibuat via addWorkOrder/updateWorkOrder juga otomatis di-set customerId (lihat
+ * findOrCreateCustomerForWo).
  *
  * Optimasi: object identity dipertahankan untuk customer yang totalWo-nya tidak
- * berubah → bisa di-skip oleh React diff & db.upsert (lihat `persistChangedCustomers`).
+ * berubah → bisa di-skip oleh React diff & db.upsert.
  */
 function withRecomputedTotalWo(customers: Customer[], workOrders: WorkOrder[]): Customer[] {
-  const countByCustomer = new Map<string, number>();
+  // Count by FK (prioritas 1) — exact
+  const countById = new Map<string, number>();
+  // Count by name (prioritas 2 — fallback) — case-insensitive
+  const countByName = new Map<string, number>();
   for (const wo of workOrders) {
-    const key = (wo.customer || '').trim().toLowerCase();
-    if (!key) continue;
-    countByCustomer.set(key, (countByCustomer.get(key) ?? 0) + 1);
+    if (wo.customerId) {
+      countById.set(wo.customerId, (countById.get(wo.customerId) ?? 0) + 1);
+    } else {
+      const key = (wo.customer || '').trim().toLowerCase();
+      if (!key) continue;
+      countByName.set(key, (countByName.get(key) ?? 0) + 1);
+    }
   }
   return customers.map(c => {
-    const count =
-      (countByCustomer.get(c.perusahaan.trim().toLowerCase()) ?? 0) +
+    const byFk = countById.get(c.id) ?? 0;
+    const byName =
+      (countByName.get(c.perusahaan.trim().toLowerCase()) ?? 0) +
       (c.nama && c.nama !== '-' && c.nama.toLowerCase() !== c.perusahaan.toLowerCase()
-        ? (countByCustomer.get(c.nama.trim().toLowerCase()) ?? 0)
+        ? (countByName.get(c.nama.trim().toLowerCase()) ?? 0)
         : 0);
+    const count = byFk + byName;
     return c.totalWo === count ? c : { ...c, totalWo: count };
   });
+}
+
+/**
+ * Cari customer yang match (by name) dengan `wo.customer`, atau create baru bila
+ * tidak ada. Return `[customers list, matched/created customer id]`.
+ *
+ * Dipakai di addWorkOrder/updateWorkOrder untuk auto-set wo.customerId (FK).
+ */
+function findOrCreateCustomerForWo(
+  customers: Customer[],
+  woCustomer: string,
+): [Customer[], string] {
+  const trimmed = (woCustomer || '').trim();
+  const lower = trimmed.toLowerCase();
+  const existing = customers.find(c =>
+    c.perusahaan.toLowerCase() === lower ||
+    c.nama.toLowerCase() === lower
+  );
+  if (existing) return [customers, existing.id];
+
+  // Auto-create
+  const maxId = customers.reduce((max, c) => {
+    const n = parseInt(c.id.split('-').at(-1) || '0', 10);
+    return !isNaN(n) && n > max ? n : max;
+  }, 0);
+  const newCus: Customer = {
+    id: `CUS-${String(maxId + 1).padStart(3, '0')}`,
+    nama: '-',
+    perusahaan: trimmed,
+    telepon: '-',
+    alamat: '-',
+    totalWo: 0,
+  };
+  db.customers.upsert(newCus);
+  return [[...customers, newCus], newCus.id];
 }
 
 /**
@@ -828,16 +883,15 @@ export const useStore = create<AppState>((set) => ({
 
     // Auto-set tanggalInvoice saat pertama kali transit ke Finished/Picked Up.
     // Bisa di-override manual oleh user, dan tidak berubah saat re-print.
-    const finalWo: WorkOrder = (justFinished && !updatedWo.tanggalInvoice && updatedWo.estimatedCost > 0)
+    let finalWo: WorkOrder = (justFinished && !updatedWo.tanggalInvoice && updatedWo.estimatedCost > 0)
       ? { ...updatedWo, tanggalInvoice: new Date().toISOString().slice(0, 10) }
       : updatedWo;
 
-    const newCustomers = [...state.customers];
-    if (!newCustomers.some(c => c.perusahaan.toLowerCase() === finalWo.customer.toLowerCase() || c.nama.toLowerCase() === finalWo.customer.toLowerCase())) {
-      const maxId = newCustomers.reduce((max, c) => { const n = parseInt(c.id.split('-').at(-1) || '0', 10); return !isNaN(n) && n > max ? n : max; }, 0);
-      const newCus = { id: `CUS-${String(maxId + 1).padStart(3, '0')}`, nama: '-', perusahaan: finalWo.customer, telepon: '-', alamat: '-', totalWo: 0 };
-      newCustomers.push(newCus);
-      db.customers.upsert(newCus);
+    // Auto-set/refresh customerId (FK). Kalau nama customer di-edit, customerId
+    // ikut ter-update ke customer yang baru match (atau auto-create).
+    const [newCustomers, matchedCustomerId] = findOrCreateCustomerForWo(state.customers, finalWo.customer);
+    if (finalWo.customerId !== matchedCustomerId) {
+      finalWo = { ...finalWo, customerId: matchedCustomerId };
     }
 
     const newFinance = [...state.finance];
@@ -886,17 +940,15 @@ export const useStore = create<AppState>((set) => ({
     };
   }),
   addWorkOrder: (wo) => set((state) => {
-    const newCustomers = [...state.customers];
-    if (!newCustomers.some(c => c.perusahaan.toLowerCase() === wo.customer.toLowerCase() || c.nama.toLowerCase() === wo.customer.toLowerCase())) {
-      const maxId = newCustomers.reduce((max, c) => { const n = parseInt(c.id.split('-').at(-1) || '0', 10); return !isNaN(n) && n > max ? n : max; }, 0);
-      const newCus = { id: `CUS-${String(maxId + 1).padStart(3, '0')}`, nama: '-', perusahaan: wo.customer, telepon: '-', alamat: '-', totalWo: 0 };
-      newCustomers.push(newCus);
-      db.customers.upsert(newCus);
-    }
-    // Apply default termin dari settings kalau WO belum spesifikasi
-    const woWithDefaults: WorkOrder = wo.terminHari === undefined
-      ? { ...wo, terminHari: state.bengkelSettings.defaultTerminHari ?? 0 }
-      : wo;
+    // Cari / buat customer record (FK)
+    const [newCustomers, matchedCustomerId] = findOrCreateCustomerForWo(state.customers, wo.customer);
+
+    // Apply default termin dari settings + auto-set customerId
+    const woWithDefaults: WorkOrder = {
+      ...wo,
+      customerId: matchedCustomerId,
+      terminHari: wo.terminHari ?? state.bengkelSettings.defaultTerminHari ?? 0,
+    };
     db.workOrders.upsert(woWithDefaults);
     toast.success(`SPK ${woWithDefaults.id} berhasil dibuat.`);
 
