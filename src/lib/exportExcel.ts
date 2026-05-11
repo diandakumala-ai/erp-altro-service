@@ -193,7 +193,11 @@ export function exportPiutang(
       'Tgl Invoice': wo.tanggalInvoice ?? '-',
       'Jatuh Tempo': info.jatuhTempo ?? '-',
       'Aging': aging,
-      'Total Tagihan (Rp)': Math.max((wo.estimatedCost || 0) - (wo.diskon || 0), 0),
+      'Total Tagihan (Rp)': (() => {
+        const base = Math.max((wo.estimatedCost || 0) - (wo.diskon || 0), 0);
+        const ppn = wo.usePpn ? Math.round(base * ((wo.ppnPercent ?? 11) / 100)) : 0;
+        return base + ppn;
+      })(),
       'Sudah Dibayar (Rp)': info.totalBayar,
       'Sisa Tagihan (Rp)': info.sisaTagihan,
       'Status Bayar': info.status,
@@ -446,7 +450,11 @@ export function exportLaporanLengkap(
         'Tgl Invoice': wo.tanggalInvoice ?? '-',
         'Jatuh Tempo': info.jatuhTempo ?? '-',
         'Aging': aging,
-        'Total Tagihan': Math.max((wo.estimatedCost || 0) - (wo.diskon || 0), 0),
+        'Total Tagihan': (() => {
+          const base = Math.max((wo.estimatedCost || 0) - (wo.diskon || 0), 0);
+          const ppn = wo.usePpn ? Math.round(base * ((wo.ppnPercent ?? 11) / 100)) : 0;
+          return base + ppn;
+        })(),
         'Sudah Bayar': info.totalBayar, 'Sisa Tagihan': info.sisaTagihan,
         'Status': info.status,
         'Lewat Tempo?': info.isOverdue ? 'YA' : '',

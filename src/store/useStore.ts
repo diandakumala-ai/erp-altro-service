@@ -33,9 +33,20 @@ export interface WorkOrder {
    * atau `'Pelunasan'`. Field ini hanya rencana yang dipakai sebagai default
    * di Finance suggestion + invoice DP.
    *
-   * Sisa pelunasan = (estimatedCost - diskon) - dpAmount.
+   * Sisa pelunasan = (estimatedCost - diskon - ppn nominal) - dpAmount,
+   * dengan ppn nominal dihitung dari (estimatedCost - diskon) * ppnPercent / 100.
    */
   dpAmount?: number;
+  /**
+   * Aktifkan perhitungan PPN. Default: false (tanpa PPN).
+   * Bila true, PPN dihitung dari (estimatedCost - diskon) * ppnPercent / 100
+   * dan ditambahkan ke grand total invoice.
+   */
+  usePpn?: boolean;
+  /**
+   * Persentase PPN (default 11 untuk PPN 11%). Hanya dipakai bila usePpn = true.
+   */
+  ppnPercent?: number;
 }
 
 export interface InventoryItem {
@@ -123,8 +134,10 @@ export const computeStatusBayar = (wo: WorkOrder, finance: FinanceTransaction[])
     )
     .reduce((sum, f) => sum + f.nominal, 0);
 
-  // Tagihan efektif sudah dikurangi diskon
-  const effectiveTotal = Math.max((wo.estimatedCost || 0) - (wo.diskon || 0), 0);
+  // Tagihan efektif sudah dikurangi diskon dan ditambah PPN (kalau aktif)
+  const baseAfterDiskon = Math.max((wo.estimatedCost || 0) - (wo.diskon || 0), 0);
+  const ppnNominal = wo.usePpn ? Math.round(baseAfterDiskon * ((wo.ppnPercent ?? 11) / 100)) : 0;
+  const effectiveTotal = baseAfterDiskon + ppnNominal;
   const sisaTagihan = Math.max(effectiveTotal - totalBayar, 0);
 
   let status: StatusBayar;
@@ -791,13 +804,15 @@ export const useStore = create<AppState>((set) => ({
       );
       if (!alreadyRecorded) {
         const maxId = newFinance.reduce((max, f) => { const n = parseInt(f.id.split('-').at(-1) || '0', 10); return !isNaN(n) && n > max ? n : max; }, 0);
+        const baseAfterDiskon = Math.max(finalWo.estimatedCost - (finalWo.diskon ?? 0), 0);
+        const ppnNominal = finalWo.usePpn ? Math.round(baseAfterDiskon * ((finalWo.ppnPercent ?? 11) / 100)) : 0;
         const newTrx: FinanceTransaction = {
           id: `TRX-${String(maxId + 1).padStart(4, '0')}`,
           tanggal: new Date().toISOString().split('T')[0],
           kategori: 'Pemasukan',
           subKategori: 'Pelunasan',
           deskripsi: `Pelunasan - ${finalWo.id} (${finalWo.customer})`,
-          nominal: finalWo.estimatedCost,
+          nominal: baseAfterDiskon + ppnNominal,
           woId: finalWo.id,    // Phase 5: link FK eksplisit
         };
         newFinance.push(newTrx);

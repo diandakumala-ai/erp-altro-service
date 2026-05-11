@@ -32,6 +32,8 @@ const toDbWo = (w: WorkOrder) => ({
   dp_amount: w.dpAmount ?? 0,
   qty: w.qty ?? 1,
   qty_satuan: w.qtySatuan || 'UNIT',
+  use_ppn: w.usePpn ?? false,
+  ppn_percent: w.ppnPercent ?? 11,
 });
 
 const fromDbWo = (r: Record<string, unknown>): WorkOrder => ({
@@ -51,6 +53,8 @@ const fromDbWo = (r: Record<string, unknown>): WorkOrder => ({
   dpAmount: (r.dp_amount as number | null) ?? 0,
   qty: (r.qty as number | null) ?? 1,
   qtySatuan: (r.qty_satuan as string | null) || 'UNIT',
+  usePpn: (r.use_ppn as boolean | null) ?? false,
+  ppnPercent: (r.ppn_percent as number | null) ?? 11,
 });
 
 const toDbInv = (i: InventoryItem) => ({

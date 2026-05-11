@@ -5,7 +5,7 @@ import { terbilangRupiah } from '../lib/terbilang';
 
 const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(n);
 
-const VALID_TYPES = ['invoice', 'invoice-dp', 'invoice-pelunasan', 'spk', 'surat-jalan', 'laporan-keuangan', 'kuitansi', 'bukti-pembayaran'] as const;
+const VALID_TYPES = ['invoice', 'invoice-dp', 'invoice-pelunasan', 'spk', 'surat-jalan', 'tanda-terima', 'laporan-keuangan', 'kuitansi', 'bukti-pembayaran'] as const;
 const VALID_ID = /^[A-Za-z0-9_-]{1,32}$/;
 const VALID_PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -88,11 +88,15 @@ export default function PrintTemplates() {
       <div className="min-h-screen bg-slate-200 print:bg-white text-slate-800">
         <style>{`
           @media print {
-            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            body { background: white !important; margin: 0; padding: 0; }
-            @page { size: A4 portrait; margin: 1.5cm; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
+            html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
+            @page { size: A4 portrait; margin: 12mm; }
             .no-print { display: none !important; }
             .page-break { page-break-before: always; }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; }
+            thead { display: table-header-group; }
+            tfoot { display: table-row-group; }
           }
         `}</style>
 
@@ -229,7 +233,11 @@ export default function PrintTemplates() {
                       <td className="py-1.5 px-3 font-mono">{wo.id}</td>
                       <td className="py-1.5 px-3">{wo.customer}</td>
                       <td className="py-1.5 px-3 text-slate-500">{wo.merk}</td>
-                      <td className="py-1.5 px-3 text-right">{fmt(Math.max((wo.estimatedCost || 0) - (wo.diskon || 0), 0))}</td>
+                      <td className="py-1.5 px-3 text-right">{(() => {
+                        const base = Math.max((wo.estimatedCost || 0) - (wo.diskon || 0), 0);
+                        const ppn = wo.usePpn ? Math.round(base * ((wo.ppnPercent ?? 11) / 100)) : 0;
+                        return fmt(base + ppn);
+                      })()}</td>
                       <td className="py-1.5 px-3 text-right text-emerald-700">{fmt(info.totalBayar)}</td>
                       <td className="py-1.5 px-3 text-right font-bold text-amber-700">{fmt(info.sisaTagihan)}</td>
                       <td className="py-1.5 px-3 text-center font-semibold">{info.status}</td>
@@ -331,16 +339,22 @@ export default function PrintTemplates() {
       <div className="min-h-screen bg-slate-200 print:bg-white">
         <style>{`
           @media print {
-            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            body { background: white !important; margin: 0; padding: 0; }
-            @page { size: A4 portrait; margin: 0.5cm; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
+            html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
+            @page { size: A4 portrait; margin: 10mm; }
             .no-print { display: none !important; }
             .half-a4-page {
-              max-height: 138mm;
-              overflow: hidden;
+              /* Target ½ A4 atas; konten yg lebih panjang akan flow ke bawah, tidak terpotong */
+              max-height: none;
+              min-height: 0;
+              overflow: visible;
               page-break-inside: avoid;
               page-break-after: avoid;
+              box-shadow: none !important;
+              margin: 0 !important;
             }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; }
           }
         `}</style>
 
@@ -348,7 +362,7 @@ export default function PrintTemplates() {
         <div className="no-print sticky top-0 left-0 right-0 bg-slate-800 text-white p-3 flex justify-between items-center z-50 shadow-md">
           <div>
             <h2 className="font-semibold text-base">Preview {headerTitle} · {docNo}</h2>
-            <p className="text-xs text-slate-300">Cetak A4 portrait · Konten muat di ½ A4 atas — kompatibel kertas carbon copy ½ A4</p>
+            <p className="text-xs text-slate-300">Cetak A4 portrait · Target ½ A4 atas — bila konten panjang akan flow ke bawah (tidak terpotong)</p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => window.close()} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium">Tutup</button>
@@ -470,7 +484,11 @@ export default function PrintTemplates() {
   // Tiga variant: 'invoice' (full), 'invoice-dp', 'invoice-pelunasan'
   if (type === 'invoice' || type === 'invoice-dp' || type === 'invoice-pelunasan') {
     const diskon = wo.diskon ?? 0;
-    const grandTotal = Math.max(subtotal - diskon, 0);
+    const baseAfterDiskon = Math.max(subtotal - diskon, 0);
+    const usePpn = wo.usePpn ?? false;
+    const ppnPercent = wo.ppnPercent ?? 11;
+    const ppnNominal = usePpn ? Math.round(baseAfterDiskon * (ppnPercent / 100)) : 0;
+    const grandTotal = baseAfterDiskon + ppnNominal;
     const dpAmount = wo.dpAmount ?? 0;
     const piutang = computeStatusBayar(wo, finance);
     const fmtTanggalLong = (iso?: string | null) =>
@@ -512,16 +530,22 @@ export default function PrintTemplates() {
       <div className="min-h-screen bg-slate-200 print:bg-white">
         <style>{`
           @media print {
-            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            body { background: white !important; margin: 0; padding: 0; }
-            @page { size: A4 portrait; margin: 0.5cm; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
+            html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
+            @page { size: A4 portrait; margin: 10mm; }
             .no-print { display: none !important; }
             .half-a4-page {
-              max-height: 138mm;
-              overflow: hidden;
+              /* Target ½ A4 atas; konten yg lebih panjang akan flow ke bawah, tidak terpotong */
+              max-height: none;
+              min-height: 0;
+              overflow: visible;
               page-break-inside: avoid;
               page-break-after: avoid;
+              box-shadow: none !important;
+              margin: 0 !important;
             }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; }
           }
           /* Watermark OVERDUE — diagonal merah saat dicetak ulang piutang lewat tempo */
           .overdue-watermark {
@@ -678,9 +702,10 @@ export default function PrintTemplates() {
               {(() => {
                 // Hitung jumlah baris footer (untuk rowSpan info bank)
                 const showDiskon = diskon > 0;
+                const showPpn = usePpn && ppnNominal > 0;
                 const showDpRow = variant !== 'full' && dpAmount > 0;
-                // Subtotal + (Diskon?) + (DP/Sisa?) + Total = 2 + n
-                const footerRows = 2 + (showDiskon ? 1 : 0) + (showDpRow ? 1 : 0);
+                // Subtotal + (Diskon?) + (PPN?) + (DP/Sisa?) + Total = 2 + n
+                const footerRows = 2 + (showDiskon ? 1 : 0) + (showPpn ? 1 : 0) + (showDpRow ? 1 : 0);
                 return (
                   <>
                     {/* Pembayaran + Subtotal */}
@@ -701,6 +726,11 @@ export default function PrintTemplates() {
                             * Invoice DP. Sisa pelunasan Rp {fmt(sisaPelunasan)} akan ditagih dalam invoice terpisah.
                           </p>
                         )}
+                        {showPpn && (
+                          <p className="mt-1.5 text-2xs italic text-slate-600">
+                            * Harga sudah termasuk PPN {ppnPercent}%.
+                          </p>
+                        )}
                       </td>
                       <td className="py-1 px-2 border-r border-black border-b border-black text-right font-semibold">Subtotal</td>
                       <td className="py-1 px-2 border-b border-black text-right font-semibold">{fmt(subtotal)}</td>
@@ -713,6 +743,17 @@ export default function PrintTemplates() {
                         </td>
                         <td className="py-1 px-2 border-b border-black text-right font-semibold text-red-700">
                           - {fmt(diskon)}
+                        </td>
+                      </tr>
+                    )}
+                    {/* PPN — tampil hanya jika aktif */}
+                    {showPpn && (
+                      <tr>
+                        <td className="py-1 px-2 border-r border-black border-b border-black text-right font-semibold text-sky-700">
+                          PPN ({ppnPercent}%)
+                        </td>
+                        <td className="py-1 px-2 border-b border-black text-right font-semibold text-sky-700">
+                          + {fmt(ppnNominal)}
                         </td>
                       </tr>
                     )}
@@ -784,17 +825,21 @@ export default function PrintTemplates() {
       <div className="min-h-screen bg-slate-200 print:bg-white">
         <style>{`
           @media print {
-            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            body { background: white !important; margin: 0; padding: 0; }
-            @page { size: A4 portrait; margin: 1.5cm; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
+            html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
+            @page { size: A4 portrait; margin: 12mm; }
             .no-print { display: none !important; }
             .spk-page {
-              page-break-inside: avoid;
-              page-break-after: avoid;
-              page-break-before: avoid;
-              max-height: calc(297mm - 3cm);
-              overflow: hidden;
+              /* Tidak dipotong; bila konten panjang akan flow ke halaman berikut */
+              max-height: none;
+              min-height: 0;
+              overflow: visible;
+              box-shadow: none !important;
+              margin: 0 !important;
+              page-break-inside: auto;
             }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; }
           }
         `}</style>
 
@@ -802,7 +847,7 @@ export default function PrintTemplates() {
         <div className="no-print sticky top-0 left-0 right-0 bg-slate-800 text-white p-4 flex justify-between items-center z-50 shadow-md">
           <div>
             <h2 className="font-semibold text-lg">Preview SPK · {wo.id}</h2>
-            <p className="text-xs text-slate-300">Kertas A4 · Orientasi Potrait · Margin 1.5 cm · 1 Halaman</p>
+            <p className="text-xs text-slate-300">Kertas A4 · Orientasi Potrait · Margin 12 mm</p>
           </div>
           <div className="flex gap-3">
             <button onClick={() => window.close()} className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium">Tutup</button>
@@ -913,16 +958,22 @@ export default function PrintTemplates() {
       <div className="min-h-screen bg-slate-200 print:bg-white">
         <style>{`
           @media print {
-            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            body { background: white !important; margin: 0; padding: 0; }
-            @page { size: A4 portrait; margin: 0.5cm; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
+            html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
+            @page { size: A4 portrait; margin: 10mm; }
             .no-print { display: none !important; }
             .half-a4-page {
-              max-height: 138mm;
-              overflow: hidden;
+              /* Target ½ A4 atas; konten yg lebih panjang akan flow ke bawah, tidak terpotong */
+              max-height: none;
+              min-height: 0;
+              overflow: visible;
               page-break-inside: avoid;
               page-break-after: avoid;
+              box-shadow: none !important;
+              margin: 0 !important;
             }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; }
           }
         `}</style>
 
@@ -930,7 +981,7 @@ export default function PrintTemplates() {
         <div className="no-print sticky top-0 left-0 right-0 bg-slate-800 text-white p-3 flex justify-between items-center z-50 shadow-md">
           <div>
             <h2 className="font-semibold text-base">Preview Surat Jalan · {wo.id}</h2>
-            <p className="text-xs text-slate-300">Cetak A4 portrait · Konten muat di ½ A4 atas — kompatibel kertas carbon copy ½ A4</p>
+            <p className="text-xs text-slate-300">Cetak A4 portrait · Target ½ A4 atas — bila konten panjang akan flow ke bawah (tidak terpotong)</p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => window.close()} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium">Tutup</button>
@@ -1042,6 +1093,171 @@ export default function PrintTemplates() {
             </div>
 
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── TANDA TERIMA BARANG (½ A4) ──────────────────────────────────────────
+  // Dokumen pengakuan bahwa bengkel telah menerima barang customer untuk
+  // diservis. Dicetak saat barang masuk (status Queue/In Service), sebagai
+  // bukti tangan kiri customer.
+  if (type === 'tanda-terima') {
+    const ttNo = wo.id.replace('WO-', 'TT-');
+    const tanggalTerima = wo.dateIn
+      ? new Date(wo.dateIn).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+      : today;
+
+    return (
+      <div className="min-h-screen bg-slate-200 print:bg-white">
+        <style>{`
+          @media print {
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
+            @page { size: A4 portrait; margin: 10mm; }
+            .no-print { display: none !important; }
+            .print-page {
+              page-break-inside: avoid;
+              page-break-after: avoid;
+              box-shadow: none !important;
+              margin: 0 !important;
+            }
+          }
+        `}</style>
+
+        {/* Action Bar */}
+        <div className="no-print sticky top-0 left-0 right-0 bg-slate-800 text-white p-3 flex justify-between items-center z-50 shadow-md">
+          <div>
+            <h2 className="font-semibold text-base">Preview Tanda Terima · {ttNo}</h2>
+            <p className="text-xs text-slate-300">Cetak A4 portrait · Margin 10 mm · Bukti penerimaan barang customer untuk servis</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => window.close()} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium">Tutup</button>
+            <button onClick={() => window.print()} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium flex items-center gap-2">
+              🖨️ Cetak / PDF
+            </button>
+          </div>
+        </div>
+
+        {/* Konten A4 — tidak dibatasi tinggi agar tidak terpotong */}
+        <div className="print-page bg-white text-black px-8 py-5 font-sans max-w-[210mm] mx-auto my-6 shadow-2xl print:my-0 print:px-0 print:py-0 print:max-w-none print:w-full text-sm">
+
+          {/* Header */}
+          <div className="flex justify-between items-start mb-4 border-b-2 border-black pb-3">
+            <div className="flex items-start gap-3">
+              <img
+                src={bs.logoUrl || '/primary-logo.png'}
+                alt="Logo"
+                className="h-14 w-auto object-contain object-left"
+                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+              <div>
+                <h1 className="text-base font-bold font-serif tracking-wide leading-tight">{bs.namaBengkel}</h1>
+                <p className="text-2xs mt-0.5 font-semibold">{bs.alamat}{bs.kota ? `, ${bs.kota}` : ''}</p>
+                <p className="text-2xs">
+                  {bs.telepon && `Telp: ${bs.telepon}`}
+                  {bs.telepon && bs.hp && ' | '}
+                  {bs.hp && `HP: ${bs.hp}`}
+                </p>
+                {bs.email && <p className="text-2xs">Email: {bs.email}</p>}
+              </div>
+            </div>
+            <div className="text-right">
+              <h2 className="text-lg font-bold uppercase mb-1 tracking-widest text-amber-700">TANDA TERIMA</h2>
+              <p className="text-xs">No.: <span className="font-semibold">{ttNo}</span></p>
+              <p className="text-xs">Ref WO: <span className="font-mono">{wo.id}</span></p>
+              <p className="text-xs">{cityShort(bs.kota) || 'Pekanbaru'}, {tanggalTerima}</p>
+            </div>
+          </div>
+
+          {/* Pernyataan */}
+          <div className="mb-3 text-sm">
+            <p className="text-xs">Telah diterima dari:</p>
+            <p className="font-bold text-base">{wo.customer}</p>
+            <p className="mt-2 text-xs italic">
+              Bersama ini kami menyatakan telah menerima barang dengan rincian di bawah ini untuk dilakukan
+              pemeriksaan/perbaikan/servis di bengkel kami.
+            </p>
+          </div>
+
+          {/* Tabel detail barang */}
+          <table className="w-full border border-black mb-4 text-xs">
+            <thead>
+              <tr className="border-b border-black bg-slate-50">
+                <th className="py-1.5 px-2 border-r border-black text-center w-7">No.</th>
+                <th className="py-1.5 px-2 border-r border-black text-center w-20">Qty</th>
+                <th className="py-1.5 px-2 border-r border-black text-left">Nama / Merk Barang</th>
+                <th className="py-1.5 px-2 border-r border-black text-left w-32">Deskripsi / Spesifikasi</th>
+                <th className="py-1.5 px-2 text-left w-44">Keluhan / Kondisi</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="py-2 px-2 border-r border-black text-center align-top">1</td>
+                <td className="py-2 px-2 border-r border-black text-center align-top">{wo.qty ?? 1} {wo.qtySatuan || 'UNIT'}</td>
+                <td className="py-2 px-2 border-r border-black font-semibold align-top">{wo.merk}</td>
+                <td className="py-2 px-2 border-r border-black align-top">{wo.capacity && wo.capacity !== '-' ? wo.capacity : '—'}</td>
+                <td className="py-2 px-2 align-top">{wo.keluhan && wo.keluhan !== '-' ? wo.keluhan : '—'}</td>
+              </tr>
+              {/* Filler */}
+              <tr>
+                <td className="py-5 border-r border-black"></td>
+                <td className="py-5 border-r border-black"></td>
+                <td className="py-5 border-r border-black"></td>
+                <td className="py-5 border-r border-black"></td>
+                <td className="py-5"></td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Estimasi & Teknisi */}
+          <div className="grid grid-cols-2 gap-4 mb-4 text-xs">
+            <div className="border border-slate-300 rounded p-2">
+              <p className="text-2xs text-slate-500 uppercase tracking-wider font-semibold">Tanggal Masuk</p>
+              <p className="font-semibold">{tanggalTerima}</p>
+            </div>
+            <div className="border border-slate-300 rounded p-2">
+              <p className="text-2xs text-slate-500 uppercase tracking-wider font-semibold">Estimasi Selesai</p>
+              <p className="font-semibold">
+                {wo.estimasiSelesai && wo.estimasiSelesai !== '-'
+                  ? new Date(wo.estimasiSelesai).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+                  : 'Akan diinformasikan setelah pemeriksaan'}
+              </p>
+            </div>
+          </div>
+
+          {/* Catatan / Syarat */}
+          <div className="border border-slate-300 rounded p-2 mb-5 text-2xs text-slate-600 leading-relaxed">
+            <p className="font-semibold text-slate-700 mb-1">Catatan / Syarat:</p>
+            <ol className="list-decimal pl-5 space-y-0.5">
+              <li>Tanda terima ini wajib dibawa saat pengambilan barang.</li>
+              <li>Barang yang tidak diambil dalam 30 hari sejak servis selesai bukan tanggung jawab bengkel.</li>
+              <li>Estimasi waktu pengerjaan dapat berubah tergantung kondisi barang dan ketersediaan suku cadang.</li>
+              <li>Konfirmasi biaya servis akan diberikan setelah pemeriksaan awal.</li>
+            </ol>
+          </div>
+
+          {/* Tanda Tangan — 2 kolom: Pengirim/Customer · Penerima/Admin */}
+          <div className="grid grid-cols-2 gap-6 items-end mt-3 px-4">
+            <div className="text-center">
+              <p className="text-xs font-medium">Yang Menyerahkan,</p>
+              <div className="h-16 mt-1"></div>
+              <div className="pt-1.5">
+                <p className="text-xs">(................................)</p>
+                <p className="text-2xs text-gray-500 mt-0.5">{wo.customer}</p>
+              </div>
+            </div>
+            <div className="text-center">
+              <p className="text-2xs text-gray-500">{cityShort(bs.kota) || 'Pekanbaru'}, {tanggalTerima}</p>
+              <p className="text-xs font-medium mt-0.5">Yang Menerima,</p>
+              <div className="h-16 mt-1"></div>
+              <div className="pt-1.5">
+                <p className="font-bold text-xs">{bs.namaPemilik || bs.namaBengkel}</p>
+                <p className="text-2xs text-gray-500">{bs.jabatanPemilik || 'Admin Bengkel'}</p>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
     );

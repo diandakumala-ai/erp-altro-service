@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { AgGridReact } from 'ag-grid-react';
-import { Plus, Trash2, Download, FileSpreadsheet, Wrench, FileText, Printer, Truck } from 'lucide-react';
+import { Plus, Trash2, Download, FileSpreadsheet, Wrench, FileText, Printer, Truck, Receipt } from 'lucide-react';
 import { useStore, computeStatusBayar, type WorkOrder, type BomItem, type ServiceItem, type StatusBayar } from '../store/useStore';
 import type { ColDef, CellValueChangedEvent, ValueFormatterParams, ICellRendererParams } from 'ag-grid-community';
 import { exportWorkOrders } from '../lib/exportExcel';
@@ -310,7 +310,11 @@ export default function WorkOrders() {
     if (!selectedWO) return;
     const matCost = boms.filter(b => b.woId === selectedWO.id).reduce((a, b) => a + b.jumlah * b.harga, 0);
     const svcCost = services.filter(s => s.woId === selectedWO.id).reduce((a, s) => a + s.biaya, 0);
-    const newGrandTotal = Math.max((matCost + svcCost) - (selectedWO.diskon ?? 0), 0);
+    const baseAfterDiskon = Math.max((matCost + svcCost) - (selectedWO.diskon ?? 0), 0);
+    const usePpn = selectedWO.usePpn ?? false;
+    const ppnPercent = selectedWO.ppnPercent ?? 11;
+    const ppnNominal = usePpn ? Math.round(baseAfterDiskon * (ppnPercent / 100)) : 0;
+    const newGrandTotal = baseAfterDiskon + ppnNominal;
     // Clamp dpAmount agar tidak melebihi grand total baru (mis. user kurangi material)
     const clampedDp = Math.min(selectedWO.dpAmount ?? 0, newGrandTotal);
     updateWorkOrder({
@@ -320,6 +324,8 @@ export default function WorkOrders() {
       terminHari: selectedWO.terminHari ?? 0,
       tanggalInvoice: selectedWO.tanggalInvoice,
       dpAmount: clampedDp,
+      usePpn,
+      ppnPercent,
       qty: Math.max(1, selectedWO.qty ?? 1),
       qtySatuan: (selectedWO.qtySatuan || 'UNIT').trim() || 'UNIT',
     });
@@ -493,6 +499,7 @@ export default function WorkOrders() {
                         ariaLabel={`Aksi untuk ${wo.id}`}
                         actions={[
                           { label: 'Cetak SPK', icon: FileText, onClick: () => window.open(`/print/spk/${wo.id}`, '_blank') },
+                          { label: 'Cetak Tanda Terima', icon: Receipt, onClick: () => window.open(`/print/tanda-terima/${wo.id}`, '_blank') },
                           { label: 'Cetak Invoice (Full)', icon: Printer, onClick: () => window.open(`/print/invoice/${wo.id}`, '_blank') },
                           // Invoice DP & Pelunasan hanya muncul kalau WO pakai DP
                           ...((wo.dpAmount ?? 0) > 0 ? [
@@ -763,9 +770,119 @@ export default function WorkOrders() {
                 )}
               </div>
 
+              {/* PPN (Pajak) */}
+              {(() => {
+                const usePpn = selectedWO.usePpn ?? false;
+                const ppnPercent = selectedWO.ppnPercent ?? 11;
+                const baseAfterDiskon = Math.max(selectedWO.estimatedCost - (selectedWO.diskon ?? 0), 0);
+                const ppnNominal = usePpn ? Math.round(baseAfterDiskon * (ppnPercent / 100)) : 0;
+                return (
+                  <div className="bg-white border border-sky-200 rounded-lg shadow-sm p-4">
+                    <div className="mb-3">
+                      <h4 className="font-semibold text-slate-700">Pajak (PPN)</h4>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Pilih <b>Tanpa PPN</b> untuk tagihan polos, atau <b>Dengan PPN</b> untuk menambahkan PPN
+                        ke tagihan customer. PPN dihitung dari (estimasi biaya − diskon) × persen PPN.
+                      </p>
+                    </div>
+
+                    {/* Toggle tanpa vs dengan PPN */}
+                    <div className="flex gap-1.5 mb-3">
+                      {([
+                        { v: false, label: 'Tanpa PPN' },
+                        { v: true,  label: 'Dengan PPN' },
+                      ] as const).map(opt => (
+                        <button
+                          key={String(opt.v)}
+                          type="button"
+                          onClick={() => {
+                            if (opt.v) {
+                              setSelectedWO({ ...selectedWO, usePpn: true, ppnPercent: selectedWO.ppnPercent ?? 11 });
+                            } else {
+                              setSelectedWO({ ...selectedWO, usePpn: false });
+                            }
+                          }}
+                          aria-pressed={usePpn === opt.v}
+                          className={`px-3 py-1.5 text-xs font-semibold rounded-lg border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 ${
+                            usePpn === opt.v
+                              ? 'bg-sky-600 border-sky-600 text-white shadow-sm'
+                              : 'bg-white border-slate-200 text-slate-600 hover:border-sky-300 hover:text-sky-700'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Input persen PPN — hanya saat aktif */}
+                    {usePpn && (
+                      <>
+                        <div className="flex items-end gap-2 flex-wrap">
+                          <div className="w-32">
+                            <label htmlFor="ppn-pct" className="text-xs text-slate-500 font-medium block mb-1">Persentase PPN</label>
+                            <div className="flex items-center border border-slate-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-sky-400">
+                              <input
+                                id="ppn-pct"
+                                type="number"
+                                min={0}
+                                max={100}
+                                step={0.5}
+                                value={ppnPercent}
+                                onChange={e => {
+                                  const pct = Math.min(100, Math.max(0, Number(e.target.value)));
+                                  setSelectedWO({ ...selectedWO, ppnPercent: pct });
+                                }}
+                                className="flex-1 px-3 py-1.5 text-sm text-right focus:outline-none min-w-0 w-full"
+                              />
+                              <span className="px-2.5 py-1.5 bg-slate-50 text-xs text-slate-500 border-l border-slate-300 font-medium">%</span>
+                            </div>
+                          </div>
+                          {/* Quick preset */}
+                          <div className="flex flex-col gap-1 pb-1">
+                            <span className="text-tiny text-slate-400">Cepat</span>
+                            <div className="flex gap-1">
+                              {[10, 11, 12].map(p => (
+                                <button
+                                  key={p}
+                                  type="button"
+                                  onClick={() => setSelectedWO({ ...selectedWO, ppnPercent: p })}
+                                  className="px-1.5 py-0.5 text-2xs font-semibold border border-slate-200 rounded text-slate-600 hover:bg-sky-50 hover:border-sky-300 hover:text-sky-700 transition-colors"
+                                >
+                                  {p}%
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Summary breakdown */}
+                        <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                          <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                            <p className="text-tiny text-slate-500 font-semibold uppercase tracking-wider">DPP (Setelah Diskon)</p>
+                            <p className="text-sm font-bold text-slate-700">Rp {fmt(baseAfterDiskon)}</p>
+                          </div>
+                          <div className="bg-sky-50 border border-sky-200 rounded-lg px-3 py-2">
+                            <p className="text-tiny text-sky-600 font-semibold uppercase tracking-wider">PPN ({ppnPercent}%)</p>
+                            <p className="text-sm font-bold text-sky-700">Rp {fmt(ppnNominal)}</p>
+                          </div>
+                          <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2">
+                            <p className="text-tiny text-indigo-600 font-semibold uppercase tracking-wider">Total Tagihan</p>
+                            <p className="text-sm font-bold text-indigo-800">Rp {fmt(baseAfterDiskon + ppnNominal)}</p>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Rencana Pembayaran (DP / Partial Payment) */}
               {(() => {
-                const grandTotal = Math.max(selectedWO.estimatedCost - (selectedWO.diskon ?? 0), 0);
+                const baseAfterDiskon = Math.max(selectedWO.estimatedCost - (selectedWO.diskon ?? 0), 0);
+                const ppnNominal = (selectedWO.usePpn ?? false)
+                  ? Math.round(baseAfterDiskon * ((selectedWO.ppnPercent ?? 11) / 100))
+                  : 0;
+                const grandTotal = baseAfterDiskon + ppnNominal;
                 const dpAmount = selectedWO.dpAmount ?? 0;
                 const isPartial = dpAmount > 0;
                 const dpPct = grandTotal > 0 ? +((dpAmount / grandTotal) * 100).toFixed(2) : 0;
