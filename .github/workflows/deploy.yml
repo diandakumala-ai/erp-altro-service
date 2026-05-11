@@ -60,51 +60,71 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@39
 
-      - name: Vercel API diagnostics (cek project bisa diakses)
+      - name: Cari project Vercel via API (auto-discover, bypass PROJECT_ID secret)
+        id: discover
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          echo "== Vercel CLI version =="
-          vercel --version
-          echo
           echo "== Token owner =="
           curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v2/user" \
-            | jq -r '"username=" + .user.username + " | email=" + .user.email'
+            | jq -r '"  username=" + .user.username + " | email=" + .user.email'
           echo
-          echo "== Cek project dengan teamId =="
-          http_code=$(curl -sS -o /tmp/proj.json -w "%{http_code}" \
-            -H "Authorization: Bearer $VERCEL_TOKEN" \
-            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID")
-          echo "HTTP $http_code"
-          jq '{id, name, accountId, framework}' < /tmp/proj.json 2>/dev/null || cat /tmp/proj.json
-          echo
-          echo "== Cek project TANPA teamId (personal scope) =="
-          http_code=$(curl -sS -o /tmp/proj2.json -w "%{http_code}" \
-            -H "Authorization: Bearer $VERCEL_TOKEN" \
-            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID")
-          echo "HTTP $http_code"
-          jq '{id, name, accountId, framework}' < /tmp/proj2.json 2>/dev/null || cat /tmp/proj2.json
-          echo
-          echo "== List projects (personal scope) =="
-          curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
-            "https://api.vercel.com/v9/projects?limit=20" \
-            | jq -r '.projects[]? | "  - \(.name) | id=\(.id) | accountId=\(.accountId)"'
-          echo
-          echo "== List teams =="
-          curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
-            "https://api.vercel.com/v2/teams" \
-            | jq -r '.teams[]? | "  - \(.name) | id=\(.id) | slug=\(.slug)"'
 
-      - name: Deploy ke Vercel (Production)
+          echo "== Cari project bernama 'erp-app' di personal scope =="
+          curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v9/projects?limit=50" > /tmp/projs_personal.json
+          PERSONAL_PROJ_ID=$(jq -r '.projects[]? | select(.name=="erp-app") | .id' < /tmp/projs_personal.json | head -1)
+          echo "Personal scope: $(jq -r '.projects[]? | "  - \(.name) [\(.id)]"' < /tmp/projs_personal.json | head -20)"
+          echo "→ erp-app di personal: ${PERSONAL_PROJ_ID:-(tidak ditemukan)}"
+          echo
+
+          echo "== List teams (cari project di tiap team) =="
+          curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v2/teams" > /tmp/teams.json
+          jq -r '.teams[]? | "  - \(.name) | id=\(.id) | slug=\(.slug)"' < /tmp/teams.json
+
+          TEAM_PROJ_ID=""
+          FOUND_TEAM_ID=""
+          for tid in $(jq -r '.teams[]? | .id' < /tmp/teams.json); do
+            pid=$(curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v9/projects?teamId=$tid&limit=50" \
+              | jq -r '.projects[]? | select(.name=="erp-app") | .id' | head -1)
+            if [ -n "$pid" ]; then
+              echo "→ erp-app di team $tid: $pid"
+              TEAM_PROJ_ID=$pid
+              FOUND_TEAM_ID=$tid
+              break
+            fi
+          done
+
+          # Pilih: utamakan team scope kalau ada, fallback ke personal
+          if [ -n "$TEAM_PROJ_ID" ]; then
+            FINAL_PROJ_ID=$TEAM_PROJ_ID
+            FINAL_ORG_ID=$FOUND_TEAM_ID
+            echo "✓ Pakai project di team: PROJECT_ID=$FINAL_PROJ_ID ORG_ID=$FINAL_ORG_ID"
+          elif [ -n "$PERSONAL_PROJ_ID" ]; then
+            FINAL_PROJ_ID=$PERSONAL_PROJ_ID
+            # Personal scope: accountId user
+            FINAL_ORG_ID=$(curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v2/user" | jq -r '.user.id')
+            echo "✓ Pakai project di personal scope: PROJECT_ID=$FINAL_PROJ_ID ORG_ID=$FINAL_ORG_ID"
+          else
+            echo "::error::Project 'erp-app' tidak ditemukan di personal scope maupun teams yang bisa diakses token ini. Periksa: (1) project ada di Vercel; (2) VERCEL_TOKEN punya akses ke account/team yang benar."
+            exit 1
+          fi
+
+          echo "PROJECT_ID=$FINAL_PROJ_ID" >> "$GITHUB_OUTPUT"
+          echo "ORG_ID=$FINAL_ORG_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy ke Vercel (Production) — pakai ID yang ditemukan
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ steps.discover.outputs.ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ steps.discover.outputs.PROJECT_ID }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
+          echo "Deploy dengan ORG_ID=$VERCEL_ORG_ID PROJECT_ID=$VERCEL_PROJECT_ID"
           vercel deploy \
             --prod \
             --yes \
