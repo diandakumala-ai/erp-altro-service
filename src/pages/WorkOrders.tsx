@@ -391,7 +391,115 @@ export default function WorkOrders() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-auto">
+          {/* ─── MOBILE: Card list (<md) ─── Optimal untuk owner persona: scan-friendly,
+               touch target besar, tap = buka edit dialog. ActionMenu untuk cetak invoice/dll.
+               Tetap pakai data filter & sort yang sama dengan desktop table. */}
+          <div className="md:hidden flex-1 overflow-auto p-3 space-y-2">
+            {filtered.length === 0 ? (
+              search || statusFilter !== 'all' ? (
+                <EmptyState
+                  icon={Wrench}
+                  title="Tidak ada SPK yang cocok"
+                  description={search ? `Tidak ditemukan untuk "${search}".` : 'Coba ubah filter status.'}
+                  action={
+                    <Button variant="secondary" size="md" onClick={() => { setSearch(''); setStatusFilter('all'); }}>
+                      Reset filter
+                    </Button>
+                  }
+                />
+              ) : (
+                <EmptyState
+                  icon={Wrench}
+                  title="Belum ada Work Order"
+                  description="Buat SPK pertama untuk mulai mengelola pekerjaan."
+                  action={
+                    <Button variant="primary" size="md" onClick={handleAddWO}>
+                      <Plus className="w-4 h-4" /> Buat SPK Pertama
+                    </Button>
+                  }
+                />
+              )
+            ) : (
+              filtered.map((wo) => {
+                const piutang = computeStatusBayar(wo, finance);
+                return (
+                  <div
+                    key={wo.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Detail Work Order ${wo.id} untuk ${wo.customer}`}
+                    onClick={() => setSelectedWO(wo)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedWO(wo); } }}
+                    className="block bg-white border border-slate-200 rounded-xl p-3 shadow-sm hover:shadow-md active:bg-slate-50 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 cursor-pointer"
+                  >
+                    {/* Top row: Status pill + WO ID + Action menu */}
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <StatusPill status={wo.status} size="xs" />
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-2xs text-slate-400">{wo.id}</span>
+                        {/* Stop propagation supaya action menu tidak trigger setSelectedWO */}
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <ActionMenu
+                            ariaLabel={`Aksi untuk ${wo.id}`}
+                            actions={[
+                              { label: 'Cetak SPK', icon: FileText, onClick: () => window.open(`/print/spk/${wo.id}`, '_blank') },
+                              { label: 'Cetak Tanda Terima', icon: Receipt, onClick: () => window.open(`/print/tanda-terima/${wo.id}`, '_blank') },
+                              { label: 'Cetak Invoice (Full)', icon: Printer, onClick: () => window.open(`/print/invoice/${wo.id}`, '_blank') },
+                              ...((wo.dpAmount ?? 0) > 0 ? [
+                                { label: 'Cetak Invoice DP', icon: Printer, onClick: () => window.open(`/print/invoice-dp/${wo.id}`, '_blank') },
+                                { label: 'Cetak Invoice Pelunasan', icon: Printer, onClick: () => window.open(`/print/invoice-pelunasan/${wo.id}`, '_blank') },
+                              ] : []),
+                              { label: 'Cetak Surat Jalan', icon: Truck, onClick: () => window.open(`/print/surat-jalan/${wo.id}`, '_blank') },
+                              { label: 'Hapus WO', icon: Trash2, destructive: true, separator: true, onClick: async () => {
+                                const ok = await confirm({
+                                  title: 'Hapus Work Order?',
+                                  message: <>Pekerjaan <b>{wo.id}</b> ({wo.customer} — {wo.merk}) akan dihapus permanen, beserta semua data BOM, jasa, dan transaksi terkait. Tindakan ini <b>tidak bisa diurungkan</b>.</>,
+                                  destructive: true,
+                                  confirmLabel: 'Hapus WO',
+                                });
+                                if (ok) deleteWorkOrder(wo.id);
+                              } },
+                            ]}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    {/* Customer + item */}
+                    <p className="font-semibold text-sm text-slate-800 truncate">{wo.customer}</p>
+                    <p className="text-xs text-slate-500 truncate mt-0.5">
+                      {(wo.qty ?? 1) > 1 && <span className="font-semibold">{wo.qty}× </span>}
+                      {wo.merk || '—'}{wo.capacity && wo.capacity !== '-' ? ` · ${wo.capacity}` : ''}
+                    </p>
+                    {/* Bottom row: biaya + piutang */}
+                    <div className="mt-2 pt-2 border-t border-slate-100 flex items-end justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className={`text-base font-bold ${wo.estimatedCost ? 'text-slate-800' : 'text-slate-300'}`}>
+                          {wo.estimatedCost ? `Rp ${fmt(wo.estimatedCost)}` : '—'}
+                        </p>
+                        {wo.estimatedCost > 0 && (
+                          <span className={`text-2xs font-bold uppercase tracking-wider ${(wo.terminHari ?? 0) === 0 ? 'text-slate-400' : 'text-indigo-600'}`}>
+                            {(wo.terminHari ?? 0) === 0 ? 'COD' : `NET ${wo.terminHari}`}
+                          </span>
+                        )}
+                      </div>
+                      {wo.estimatedCost > 0 && (
+                        <StatusBayarBadge
+                          status={piutang.status}
+                          sisa={piutang.sisaTagihan}
+                          isOverdue={piutang.isOverdue}
+                          isDueSoon={piutang.isDueSoon}
+                          hariKeJatuhTempo={piutang.hariKeJatuhTempo}
+                        />
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* ─── DESKTOP: Table (md+) ─── */}
+          <div className="hidden md:block flex-1 overflow-auto">
             <table className="w-full text-sm border-collapse min-w-[1200px]">
               <thead className="bg-slate-50 sticky top-0" style={{ zIndex: 'var(--z-sticky)' }}>
                 <tr className="border-b border-slate-200">
