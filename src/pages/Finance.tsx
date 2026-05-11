@@ -5,7 +5,7 @@ import { exportBukuKas, exportLaporanBulanan, exportPiutang, exportLaporanLengka
 import { toast } from '../lib/toast';
 import { Button, DataHeader, DataCell, EmptyRow, EmptyState, StatCard, SearchInput, ActionMenu, type SortDir } from '../components/ui';
 import { confirm } from '../lib/confirm';
-import { fmt as fmtNumber } from '../lib/format';
+import { fmt as fmtNumber, fmtBulanTahun, fmtBulanPendekTahun, fmtTanggalPendekTahun } from '../lib/format';
 
 // Finance memakai versi absolut untuk display (tanda +/− digabung manual)
 const fmt = (n: number) => fmtNumber(Math.abs(n));
@@ -364,7 +364,7 @@ export default function Finance() {
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const str = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const label = d.toLocaleDateString('id-ID', { month: 'short', year: 'numeric' });
+      const label = fmtBulanPendekTahun(str);
       const trxs = finance.filter(t => t.tanggal.startsWith(str));
       const pem = trxs.filter(t => t.nominal > 0).reduce((a, b) => a + b.nominal, 0);
       const peng = Math.abs(trxs.filter(t => t.nominal < 0).reduce((a, b) => a + b.nominal, 0));
@@ -415,10 +415,7 @@ export default function Finance() {
   );
 
   // Nama bulan untuk label
-  const reportLabel = useMemo(() => {
-    const [y, m] = reportPeriod.split('-');
-    return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
-  }, [reportPeriod]);
+  const reportLabel = useMemo(() => fmtBulanTahun(reportPeriod), [reportPeriod]);
 
   // Build list bulan tersedia dari data (untuk dropdown)
   const availableMonths = useMemo(() => {
@@ -722,11 +719,9 @@ export default function Finance() {
                   className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 font-medium text-slate-700"
                   aria-label="Pilih periode laporan"
                 >
-                  {availableMonths.map(m => {
-                    const [y, mo] = m.split('-');
-                    const label = new Date(Number(y), Number(mo) - 1, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
-                    return <option key={m} value={m}>{label}</option>;
-                  })}
+                  {availableMonths.map(m => (
+                    <option key={m} value={m}>{fmtBulanTahun(m)}</option>
+                  ))}
                 </select>
                 <span className="text-xs text-slate-400">({reportTrx.length} transaksi)</span>
               </div>
@@ -975,7 +970,7 @@ export default function Finance() {
                             {info.jatuhTempo ? (
                               <div>
                                 <div className={`font-medium ${info.isOverdue ? 'text-red-700' : info.isDueSoon ? 'text-amber-700' : 'text-slate-700'}`}>
-                                  {new Date(info.jatuhTempo).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                  {fmtTanggalPendekTahun(info.jatuhTempo)}
                                 </div>
                                 <div className={`text-2xs ${info.isOverdue ? 'text-red-600' : info.isDueSoon ? 'text-amber-600' : 'text-slate-400'}`}>
                                   {info.isOverdue && info.hariKeJatuhTempo != null && `🔴 Lewat ${Math.abs(info.hariKeJatuhTempo)} hari`}

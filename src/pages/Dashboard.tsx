@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { StatusPill, WO_STATUS, isFinished, StatCard } from '../components/ui';
-import { fmt, fmtShort } from '../lib/format';
+import { fmt, fmtShort, fmtBulanChart, fmtTanggalLengkap } from '../lib/format';
 
 // Re-export untuk backward compatibility (WorkOrders.tsx pakai ini)
 export { StatusPill };
@@ -48,10 +48,8 @@ export default function Dashboard() {
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
-      months.push({
-        key: d.toISOString().slice(0, 7),
-        label: d.toLocaleDateString('id-ID', { month: 'short', year: '2-digit' }),
-      });
+      const key = d.toISOString().slice(0, 7);
+      months.push({ key, label: fmtBulanChart(key) });
     }
     const chartData = months.map(m => ({
       label: m.label,
@@ -74,7 +72,7 @@ export default function Dashboard() {
       <header className="bg-white border-b border-slate-200 h-12 flex items-center pl-14 pr-4 lg:px-6 justify-between shrink-0">
         <h2 className="text-base font-semibold text-slate-800">Dashboard</h2>
         <p className="text-xs text-slate-400">
-          {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          {fmtTanggalLengkap(new Date().toISOString().slice(0, 10))}
         </p>
       </header>
 

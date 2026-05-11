@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useStore, computeStatusBayar } from '../store/useStore';
-import { cityShort } from '../lib/format';
+import { cityShort, fmtTanggal, fmtBulanTahun } from '../lib/format';
 import { terbilangRupiah } from '../lib/terbilang';
 
 const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(n);
@@ -40,7 +40,7 @@ export default function PrintTemplates() {
   const woBoms = boms.filter(b => b.woId === id);
   const woServices = services.filter(s => s.woId === id);
 
-  const today = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+  const today = fmtTanggal(new Date().toISOString().slice(0, 10));
   const totalMaterial = woBoms.reduce((acc, curr) => acc + (curr.jumlah * curr.harga), 0);
   const totalJasa = woServices.reduce((acc, curr) => acc + curr.biaya, 0);
   const subtotal = totalMaterial + totalJasa;
@@ -61,12 +61,7 @@ export default function PrintTemplates() {
     const totalPengeluaran = Math.abs(trxFiltered.filter(r => r.nominal < 0).reduce((a, r) => a + r.nominal, 0));
     const labaBersih = totalPemasukan - totalPengeluaran;
 
-    const periodLabel = period
-      ? (() => {
-          const [y, m] = period.split('-');
-          return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
-        })()
-      : 'Semua Periode';
+    const periodLabel = period ? fmtBulanTahun(period) : 'Semua Periode';
 
     const subsPemasukan = ['Pembayaran Servis', 'DP', 'Lain-lain'].map(sub => ({
       sub, total: trxFiltered.filter(t => t.nominal > 0 && t.subKategori === sub).reduce((a, b) => a + b.nominal, 0),
@@ -303,9 +298,7 @@ export default function PrintTemplates() {
     }
 
     const nominalAbs = Math.abs(trx.nominal);
-    const trxTanggal = trx.tanggal
-      ? new Date(trx.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
-      : today;
+    const trxTanggal = trx.tanggal ? fmtTanggal(trx.tanggal) : today;
 
     // Ambil data WO terkait kalau trx ada woId — untuk konteks "untuk pembayaran apa"
     const trxWo = trx.woId ? workOrders.find(w => w.id === trx.woId) : undefined;
@@ -493,7 +486,7 @@ export default function PrintTemplates() {
     const dpAmount = wo.dpAmount ?? 0;
     const piutang = computeStatusBayar(wo, finance);
     const fmtTanggalLong = (iso?: string | null) =>
-      iso ? new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
+      iso ? fmtTanggal(iso) : '-';
 
     // Variant config — title, jumlah yang ditagih, label
     const variant = type === 'invoice-dp' ? 'dp' : type === 'invoice-pelunasan' ? 'pelunasan' : 'full';
@@ -1105,9 +1098,7 @@ export default function PrintTemplates() {
   // bukti tangan kiri customer.
   if (type === 'tanda-terima') {
     const ttNo = wo.id.replace('WO-', 'TT-');
-    const tanggalTerima = wo.dateIn
-      ? new Date(wo.dateIn).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
-      : today;
+    const tanggalTerima = wo.dateIn ? fmtTanggal(wo.dateIn) : today;
 
     return (
       <div className="min-h-screen bg-slate-200 print:bg-white">
@@ -1221,7 +1212,7 @@ export default function PrintTemplates() {
               <p className="text-2xs text-slate-500 uppercase tracking-wider font-semibold">Estimasi Selesai</p>
               <p className="font-semibold">
                 {wo.estimasiSelesai && wo.estimasiSelesai !== '-'
-                  ? new Date(wo.estimasiSelesai).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+                  ? fmtTanggal(wo.estimasiSelesai)
                   : 'Akan diinformasikan setelah pemeriksaan'}
               </p>
             </div>

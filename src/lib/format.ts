@@ -39,6 +39,58 @@ export const fmtTanggalPendek = (iso: string): string => {
   return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
 };
 
+/** Format tanggal pendek + tahun `2025-01-15` → `"15 Jan 2025"`. */
+export const fmtTanggalPendekTahun = (iso: string): string => {
+  if (!iso || iso === '-') return '-';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
+/** Format tanggal lengkap dengan nama hari `2025-01-15` → `"Rabu, 15 Januari 2025"`. */
+export const fmtTanggalLengkap = (iso: string): string => {
+  if (!iso || iso === '-') return '-';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('id-ID', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  });
+};
+
+/** Format bulan + tahun panjang `"2025-01"` atau `"2025-01-15"` → `"Januari 2025"`. */
+export const fmtBulanTahun = (isoMonth: string): string => {
+  if (!isoMonth || isoMonth === '-') return '-';
+  // Accept both YYYY-MM and YYYY-MM-DD
+  const ym = isoMonth.length >= 7 ? isoMonth.slice(0, 7) : isoMonth;
+  const [y, m] = ym.split('-');
+  if (!y || !m) return isoMonth;
+  const d = new Date(Number(y), Number(m) - 1, 1);
+  if (isNaN(d.getTime())) return isoMonth;
+  return d.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+};
+
+/** Format bulan pendek + tahun `"2025-01"` → `"Jan 2025"`. */
+export const fmtBulanPendekTahun = (isoMonth: string): string => {
+  if (!isoMonth || isoMonth === '-') return '-';
+  const ym = isoMonth.length >= 7 ? isoMonth.slice(0, 7) : isoMonth;
+  const [y, m] = ym.split('-');
+  if (!y || !m) return isoMonth;
+  const d = new Date(Number(y), Number(m) - 1, 1);
+  if (isNaN(d.getTime())) return isoMonth;
+  return d.toLocaleDateString('id-ID', { month: 'short', year: 'numeric' });
+};
+
+/** Format bulan pendek + tahun 2-digit untuk label chart `"2025-01"` → `"Jan 25"`. */
+export const fmtBulanChart = (isoMonth: string): string => {
+  if (!isoMonth || isoMonth === '-') return '-';
+  const ym = isoMonth.length >= 7 ? isoMonth.slice(0, 7) : isoMonth;
+  const [y, m] = ym.split('-');
+  if (!y || !m) return isoMonth;
+  const d = new Date(Number(y), Number(m) - 1, 1);
+  if (isNaN(d.getTime())) return isoMonth;
+  return d.toLocaleDateString('id-ID', { month: 'short', year: '2-digit' });
+};
+
 /**
  * Ekstrak nama kota saja dari setting `kota` yang biasa diisi
  * "Kota, Provinsi" (mis. "Pekanbaru, Riau"). Dipakai di tempat

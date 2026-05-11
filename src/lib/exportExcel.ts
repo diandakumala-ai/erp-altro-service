@@ -8,6 +8,7 @@
 import * as XLSX from 'xlsx';
 import type { WorkOrder, InventoryItem, FinanceTransaction, Customer } from '../store/useStore';
 import { computeStatusBayar } from '../store/useStore';
+import { fmtTanggal, fmtBulanTahun } from './format';
 
 // ─── HELPERS ──────────────────────────────────────────────────
 
@@ -42,12 +43,8 @@ function fileDate(): string {
   return new Date().toISOString().slice(0, 10).replace(/-/g, '');
 }
 
-/** Label bulan Indonesia */
-function monthLabel(period: string): string {
-  const [y, m] = period.split('-');
-  return new Date(Number(y), Number(m) - 1, 1)
-    .toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
-}
+/** Label bulan Indonesia — wrapper untuk konsistensi import path. */
+const monthLabel = fmtBulanTahun;
 
 // ─── 1. BUKU KAS (Finance Transactions) ───────────────────────
 
@@ -376,7 +373,7 @@ export function exportLaporanLengkap(
   const summaryData = [
     ['LAPORAN KEUANGAN CV ALTRO SERVICE'],
     ['Periode:', periodeLabel],
-    ['Dicetak:', new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })],
+    ['Dicetak:', fmtTanggal(new Date().toISOString().slice(0, 10))],
     [],
     ['RINGKASAN KEUANGAN', ''],
     ['Total Pemasukan', pemasukan],

@@ -4,7 +4,7 @@ import { useStore, type BengkelSettings } from '../store/useStore';
 import { toast } from '../lib/toast';
 import { supabase } from '../lib/supabase';
 import { Button, Section as UISection, TerminSelector } from '../components/ui';
-import { cityShort } from '../lib/format';
+import { cityShort, fmtTanggal } from '../lib/format';
 
 function FormField({
   label, value, onChange, placeholder, icon: Icon, hint,
@@ -73,7 +73,7 @@ function KopSuratPreview({ s }: { s: BengkelSettings }) {
             </div>
             <div className="text-right text-xs text-slate-500">
               <p className="font-semibold text-slate-700">No. Dokumen : WO-XXXX-XXX</p>
-              <p className="mt-1">Dicetak: {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+              <p className="mt-1">Dicetak: {fmtTanggal(new Date().toISOString().slice(0, 10))}</p>
             </div>
           </div>
 
