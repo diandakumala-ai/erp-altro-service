@@ -1,11 +1,14 @@
 import { useParams } from 'react-router-dom';
-import { useStore, computeStatusBayar } from '../store/useStore';
+import {
+  useStore, computeStatusBayar, computeLabaRugi, computeNeraca,
+  periodeBulan, periodeTahun,
+} from '../store/useStore';
 import { cityShort, fmtTanggal, fmtBulanTahun } from '../lib/format';
 import { terbilangRupiah } from '../lib/terbilang';
 
 const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(n);
 
-const VALID_TYPES = ['invoice', 'invoice-dp', 'invoice-pelunasan', 'spk', 'surat-jalan', 'tanda-terima', 'laporan-keuangan', 'kuitansi', 'bukti-pembayaran'] as const;
+const VALID_TYPES = ['invoice', 'invoice-dp', 'invoice-pelunasan', 'spk', 'surat-jalan', 'tanda-terima', 'laporan-keuangan', 'laba-rugi', 'neraca', 'kuitansi', 'bukti-pembayaran'] as const;
 const VALID_ID = /^[A-Za-z0-9_-]{1,32}$/;
 const VALID_PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -465,7 +468,8 @@ export default function PrintTemplates() {
   }
 
   // Untuk semua tipe lainnya (invoice, spk, surat-jalan), butuh `wo`.
-  if (!wo) {
+  // KECUALI laba-rugi & neraca — tidak butuh WO spesifik, dihandle di bawah.
+  if (!wo && type !== 'laba-rugi' && type !== 'neraca') {
     return (
       <div className="p-10 text-center">
         <h2>Data tidak ditemukan.</h2>
@@ -477,6 +481,7 @@ export default function PrintTemplates() {
   // ─── INVOICE (½ A4 landscape / A5 landscape) ────────────────────────────
   // Tiga variant: 'invoice' (full), 'invoice-dp', 'invoice-pelunasan'
   if (type === 'invoice' || type === 'invoice-dp' || type === 'invoice-pelunasan') {
+    if (!wo) return null; // narrow — guard sudah handle
     const diskon = wo.diskon ?? 0;
     const baseAfterDiskon = Math.max(subtotal - diskon, 0);
     const usePpn = wo.usePpn ?? false;
@@ -815,6 +820,7 @@ export default function PrintTemplates() {
 
   // ─── SPK (A4) ──────────────────────────────────────────────────────────────
   if (type === 'spk') {
+    if (!wo) return null;
     return (
       <div className="min-h-screen bg-slate-200 print:bg-white">
         <style>{`
@@ -948,6 +954,7 @@ export default function PrintTemplates() {
 
   // ─── SURAT JALAN (½ A4 / A5) ─────────────────────────────────────────────
   if (type === 'surat-jalan') {
+    if (!wo) return null;
     return (
       <div className="min-h-screen bg-slate-200 print:bg-white">
         <style>{`
@@ -1097,6 +1104,7 @@ export default function PrintTemplates() {
   // diservis. Dicetak saat barang masuk (status Queue/In Service), sebagai
   // bukti tangan kiri customer.
   if (type === 'tanda-terima') {
+    if (!wo) return null;
     const ttNo = wo.id.replace('WO-', 'TT-');
     const tanggalTerima = wo.dateIn ? fmtTanggal(wo.dateIn) : today;
 
@@ -1250,6 +1258,346 @@ export default function PrintTemplates() {
             </div>
           </div>
 
+        </div>
+      </div>
+    );
+  }
+
+  // ─── LAPORAN LABA RUGI (Format Pajak Indonesia / PSAK) ────────────────────
+  if (type === 'laba-rugi') {
+    const params = new URLSearchParams(window.location.search);
+    const periodRaw = params.get('period') || '';
+    // Support both YYYY (annual) and YYYY-MM (monthly)
+    const isAnnual = /^\d{4}$/.test(periodRaw);
+    const isMonthly = VALID_PERIOD.test(periodRaw);
+    const periode = isAnnual
+      ? periodeTahun(Number(periodRaw))
+      : isMonthly
+      ? periodeBulan(periodRaw)
+      : periodeTahun(new Date().getFullYear());
+
+    const lr = computeLabaRugi(workOrders, finance, bs, periode);
+
+    const Row = ({
+      label, value, indent = 0, bold = false, tone = 'slate', topBorder = false,
+    }: {
+      label: string; value: number; indent?: number;
+      bold?: boolean; tone?: 'slate' | 'emerald' | 'red' | 'indigo'; topBorder?: boolean;
+    }) => {
+      const toneColor =
+        tone === 'emerald' ? 'text-emerald-700' :
+        tone === 'red' ? 'text-red-700' :
+        tone === 'indigo' ? 'text-indigo-700' :
+        'text-slate-700';
+      return (
+        <tr className={topBorder ? 'border-t border-slate-400' : ''}>
+          <td className={`py-1 ${bold ? 'font-bold' : ''}`} style={{ paddingLeft: `${indent * 16}px` }}>{label}</td>
+          <td className={`py-1 text-right tabular-nums ${bold ? 'font-bold' : ''} ${toneColor}`}>
+            {value < 0 ? `(${fmt(Math.abs(value))})` : fmt(value)}
+          </td>
+        </tr>
+      );
+    };
+
+    return (
+      <div className="min-h-screen bg-slate-200 print:bg-white text-slate-800">
+        <style>{`
+          @media print {
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
+            html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
+            @page { size: A4 portrait; margin: 12mm; }
+            .no-print { display: none !important; }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; }
+            thead { display: table-header-group; }
+          }
+        `}</style>
+
+        {/* Action Bar */}
+        <div className="no-print sticky top-0 bg-slate-900 text-white px-6 py-3 flex justify-between items-center z-50 shadow-lg">
+          <div>
+            <h2 className="font-bold text-base">Preview Laporan Laba Rugi</h2>
+            <p className="text-xs text-slate-400">Periode: {periode.label} · {lr.pphInfo}</p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => window.close()} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium">Tutup</button>
+            <button onClick={() => window.print()} className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-bold">🖨️ Cetak / Simpan PDF</button>
+          </div>
+        </div>
+
+        <div className="bg-white mx-auto my-8 px-12 py-10 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:w-auto print:min-h-0 w-[210mm] min-h-[297mm] font-sans">
+          {/* Header */}
+          <div className="text-center border-b-2 border-slate-800 pb-4 mb-6">
+            <h1 className="text-xl font-black text-slate-900 leading-tight uppercase">{bs.namaBengkel}</h1>
+            <p className="text-xs text-slate-500 mt-0.5">{bs.alamat}{bs.kota ? `, ${bs.kota}` : ''}</p>
+            {bs.npwp && <p className="text-xs text-slate-500">NPWP: {bs.npwp}</p>}
+            <h2 className="text-lg font-black mt-4 uppercase tracking-wide">Laporan Laba Rugi</h2>
+            <p className="text-sm font-semibold text-indigo-700">Periode {periode.label}</p>
+            <p className="text-xs text-slate-400 mt-1">(Dalam Rupiah)</p>
+          </div>
+
+          <table className="w-full text-sm">
+            <tbody>
+              {/* PENDAPATAN */}
+              <tr><td className="pt-2 pb-1 font-bold uppercase tracking-wider text-xs text-indigo-700" colSpan={2}>A. PENDAPATAN USAHA</td></tr>
+              <Row label="Pendapatan Jasa Servis" value={lr.pendapatanJasa} indent={1} tone="emerald" />
+              <Row label="Pendapatan Lain-lain" value={lr.pendapatanLain} indent={1} tone="emerald" />
+              <Row label="Total Pendapatan" value={lr.totalPendapatan} bold topBorder tone="emerald" />
+
+              {/* HPP */}
+              <tr><td className="pt-4 pb-1 font-bold uppercase tracking-wider text-xs text-red-700" colSpan={2}>B. BEBAN POKOK PENDAPATAN (HPP)</td></tr>
+              <Row label="Pembelian Material / Suku Cadang" value={lr.hppMaterial} indent={1} tone="red" />
+              <Row label="Gaji / Upah Tenaga Produksi (Teknisi)" value={lr.hppGajiProduksi} indent={1} tone="red" />
+              <Row label="Total Beban Pokok Pendapatan" value={lr.totalHpp} bold topBorder tone="red" />
+
+              {/* LABA BRUTO */}
+              <tr className="bg-slate-100">
+                <td className="py-2 px-2 font-bold uppercase tracking-wider text-xs">C. LABA BRUTO (A − B)</td>
+                <td className={`py-2 px-2 text-right tabular-nums font-bold ${lr.labaBruto >= 0 ? 'text-indigo-700' : 'text-red-700'}`}>
+                  {lr.labaBruto < 0 ? `(${fmt(Math.abs(lr.labaBruto))})` : fmt(lr.labaBruto)}
+                </td>
+              </tr>
+
+              {/* BEBAN USAHA */}
+              <tr><td className="pt-4 pb-1 font-bold uppercase tracking-wider text-xs text-red-700" colSpan={2}>D. BEBAN USAHA</td></tr>
+              <Row label="Beban Listrik & Operasional" value={lr.bebanListrikOperasional} indent={1} tone="red" />
+              <Row label="Beban Lain-lain" value={lr.bebanLainLain} indent={1} tone="red" />
+              <Row label="Total Beban Usaha" value={lr.totalBebanUsaha} bold topBorder tone="red" />
+
+              {/* LABA OPERASIONAL */}
+              <tr className="bg-slate-100">
+                <td className="py-2 px-2 font-bold uppercase tracking-wider text-xs">E. LABA OPERASIONAL / SEBELUM PAJAK (C − D)</td>
+                <td className={`py-2 px-2 text-right tabular-nums font-bold ${lr.labaOperasional >= 0 ? 'text-indigo-700' : 'text-red-700'}`}>
+                  {lr.labaOperasional < 0 ? `(${fmt(Math.abs(lr.labaOperasional))})` : fmt(lr.labaOperasional)}
+                </td>
+              </tr>
+
+              {/* PAJAK */}
+              <tr><td className="pt-4 pb-1 font-bold uppercase tracking-wider text-xs text-red-700" colSpan={2}>F. PAJAK PENGHASILAN</td></tr>
+              <Row label={`PPh Terutang — ${lr.pphInfo}`} value={lr.pphTerutang} indent={1} tone="red" />
+
+              {/* LABA BERSIH */}
+              <tr className="bg-indigo-50 border-y-2 border-indigo-600">
+                <td className="py-3 px-2 font-black uppercase tracking-wider text-sm">G. LABA BERSIH SETELAH PAJAK (E − F)</td>
+                <td className={`py-3 px-2 text-right tabular-nums font-black text-base ${lr.labaBersih >= 0 ? 'text-indigo-800' : 'text-red-800'}`}>
+                  Rp {lr.labaBersih < 0 ? `(${fmt(Math.abs(lr.labaBersih))})` : fmt(lr.labaBersih)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Catatan */}
+          <div className="mt-8 text-xs text-slate-600 border-t border-slate-300 pt-3">
+            <p className="font-semibold mb-1">Catatan:</p>
+            <ol className="list-decimal pl-5 space-y-0.5">
+              <li>Laporan disusun berdasarkan data transaksi yang tercatat di sistem ERP.</li>
+              <li>Pendapatan diakui pada saat penerimaan kas (basis kas).</li>
+              <li>PPh dihitung berdasarkan: <span className="font-semibold">{lr.pphInfo}</span>.</li>
+              <li>Laporan ini disusun untuk keperluan pelaporan pajak SPT Tahunan.</li>
+            </ol>
+          </div>
+
+          {/* Tanda tangan */}
+          <div className="mt-10 flex justify-end">
+            <div className="text-center w-56">
+              <p className="text-xs mb-14">{cityShort(bs.kota) || 'Pekanbaru'}, {today}</p>
+              <div className="border-t border-slate-700 pt-1">
+                <p className="text-xs font-bold">{bs.namaPemilik || 'Bagian Keuangan'}</p>
+                <p className="text-xs text-slate-500">{bs.jabatanPemilik || bs.namaBengkel}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── NERACA (Format Pajak Indonesia / PSAK) ───────────────────────────────
+  if (type === 'neraca') {
+    const params = new URLSearchParams(window.location.search);
+    const periodRaw = params.get('period') || '';
+    const isAnnual = /^\d{4}$/.test(periodRaw);
+    const isMonthly = VALID_PERIOD.test(periodRaw);
+    const periode = isAnnual
+      ? periodeTahun(Number(periodRaw))
+      : isMonthly
+      ? periodeBulan(periodRaw)
+      : periodeTahun(new Date().getFullYear());
+
+    const inventory = useStore.getState().inventory;
+    const n = computeNeraca(workOrders, finance, inventory, bs, periode);
+
+    const Row = ({
+      label, value, indent = 0, bold = false, tone = 'slate', topBorder = false,
+    }: {
+      label: string; value: number; indent?: number;
+      bold?: boolean; tone?: 'slate' | 'emerald' | 'red' | 'indigo'; topBorder?: boolean;
+    }) => {
+      const toneColor =
+        tone === 'emerald' ? 'text-emerald-700' :
+        tone === 'red' ? 'text-red-700' :
+        tone === 'indigo' ? 'text-indigo-700' :
+        'text-slate-700';
+      return (
+        <tr className={topBorder ? 'border-t border-slate-400' : ''}>
+          <td className={`py-1 ${bold ? 'font-bold' : ''}`} style={{ paddingLeft: `${indent * 16}px` }}>{label}</td>
+          <td className={`py-1 text-right tabular-nums ${bold ? 'font-bold' : ''} ${toneColor}`}>
+            {value < 0 ? `(${fmt(Math.abs(value))})` : fmt(value)}
+          </td>
+        </tr>
+      );
+    };
+
+    return (
+      <div className="min-h-screen bg-slate-200 print:bg-white text-slate-800">
+        <style>{`
+          @media print {
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
+            html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
+            @page { size: A4 portrait; margin: 12mm; }
+            .no-print { display: none !important; }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; }
+            thead { display: table-header-group; }
+          }
+        `}</style>
+
+        <div className="no-print sticky top-0 bg-slate-900 text-white px-6 py-3 flex justify-between items-center z-50 shadow-lg">
+          <div>
+            <h2 className="font-bold text-base">Preview Neraca Keuangan</h2>
+            <p className="text-xs text-slate-400">Per {periode.endDate} · {Math.abs(n.selisih) < 1 ? '✓ Balanced' : `⚠ Selisih Rp ${fmt(Math.abs(n.selisih))} — lengkapi modal/saldo awal di Pengaturan`}</p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => window.close()} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium">Tutup</button>
+            <button onClick={() => window.print()} className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-bold">🖨️ Cetak / Simpan PDF</button>
+          </div>
+        </div>
+
+        <div className="bg-white mx-auto my-8 px-12 py-10 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:w-auto print:min-h-0 w-[210mm] min-h-[297mm] font-sans">
+          {/* Header */}
+          <div className="text-center border-b-2 border-slate-800 pb-4 mb-6">
+            <h1 className="text-xl font-black text-slate-900 leading-tight uppercase">{bs.namaBengkel}</h1>
+            <p className="text-xs text-slate-500 mt-0.5">{bs.alamat}{bs.kota ? `, ${bs.kota}` : ''}</p>
+            {bs.npwp && <p className="text-xs text-slate-500">NPWP: {bs.npwp}</p>}
+            <h2 className="text-lg font-black mt-4 uppercase tracking-wide">Neraca Keuangan</h2>
+            <p className="text-sm font-semibold text-indigo-700">Per {new Date(periode.endDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+            <p className="text-xs text-slate-400 mt-1">(Dalam Rupiah)</p>
+          </div>
+
+          {/* Warning kalau tidak balance */}
+          {Math.abs(n.selisih) >= 1 && (
+            <div className="mb-4 bg-amber-50 border border-amber-300 rounded p-3 text-xs text-amber-800">
+              <p className="font-bold">⚠ Neraca tidak balance</p>
+              <p>Selisih Rp {fmt(Math.abs(n.selisih))} antara Aset vs Kewajiban+Ekuitas. Pastikan
+              <b> Modal Awal</b>, <b>Saldo Kas Awal</b>, dan <b>Laba Ditahan Awal</b> sudah di-set di
+              Pengaturan → Akuntansi & Pajak.</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-6">
+            {/* KIRI: ASET */}
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-wider text-center bg-indigo-100 border-y-2 border-indigo-700 py-1.5 mb-2">ASET</h3>
+              <table className="w-full text-xs">
+                <tbody>
+                  <tr><td className="pt-2 pb-1 font-bold uppercase text-xs text-indigo-700" colSpan={2}>Aset Lancar</td></tr>
+                  <Row label="Kas & Bank" value={n.kas} indent={1} />
+                  <Row label="Piutang Usaha" value={n.piutangUsaha} indent={1} />
+                  <Row label="Persediaan Barang Dagang" value={n.persediaan} indent={1} />
+                  <Row label="Total Aset Lancar" value={n.totalAsetLancar} bold topBorder tone="indigo" />
+
+                  <tr><td className="pt-3 pb-1 font-bold uppercase text-xs text-indigo-700" colSpan={2}>Aset Tetap</td></tr>
+                  {n.detailAsetTetap.length > 0 ? (
+                    <>
+                      {n.detailAsetTetap.map(a => (
+                        <Row key={a.id} label={`${a.nama} (${a.kategori})`} value={a.hargaPerolehan} indent={1} />
+                      ))}
+                      <Row label="Akumulasi Penyusutan" value={-n.akumulasiPenyusutan} indent={1} tone="red" />
+                      <Row label="Nilai Buku Aset Tetap" value={n.nilaiBukuAsetTetap} bold topBorder tone="indigo" />
+                    </>
+                  ) : (
+                    <tr><td colSpan={2} className="py-1 px-2 italic text-slate-400 text-2xs">Belum ada aset tetap. Tambah via Pengaturan.</td></tr>
+                  )}
+
+                  <tr className="bg-indigo-100 border-y-2 border-indigo-700">
+                    <td className="py-2 px-2 font-black uppercase text-xs">TOTAL ASET</td>
+                    <td className="py-2 px-2 text-right tabular-nums font-black text-indigo-800">Rp {fmt(n.totalAset)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* KANAN: KEWAJIBAN + EKUITAS */}
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-wider text-center bg-amber-100 border-y-2 border-amber-700 py-1.5 mb-2">KEWAJIBAN &amp; EKUITAS</h3>
+              <table className="w-full text-xs">
+                <tbody>
+                  <tr><td className="pt-2 pb-1 font-bold uppercase text-xs text-amber-700" colSpan={2}>Kewajiban Jangka Pendek</td></tr>
+                  {n.utangPpn > 0 && <Row label="Utang PPN Keluaran" value={n.utangPpn} indent={1} tone="red" />}
+                  {n.utangPph > 0 && <Row label="Utang PPh Terutang" value={n.utangPph} indent={1} tone="red" />}
+                  {n.utangJangkaPendekLain.map(u => (
+                    <Row key={u.id} label={u.nama} value={u.nominal} indent={1} tone="red" />
+                  ))}
+                  {n.totalKewajibanJangkaPendek === 0 && (
+                    <tr><td colSpan={2} className="py-1 px-2 italic text-slate-400 text-2xs">Tidak ada</td></tr>
+                  )}
+                  <Row label="Total Kewajiban Jk. Pendek" value={n.totalKewajibanJangkaPendek} bold topBorder tone="red" />
+
+                  <tr><td className="pt-3 pb-1 font-bold uppercase text-xs text-amber-700" colSpan={2}>Kewajiban Jangka Panjang</td></tr>
+                  {n.utangJangkaPanjang.length > 0 ? (
+                    <>
+                      {n.utangJangkaPanjang.map(u => (
+                        <Row key={u.id} label={u.nama} value={u.nominal} indent={1} tone="red" />
+                      ))}
+                      <Row label="Total Kewajiban Jk. Panjang" value={n.totalKewajibanJangkaPanjang} bold topBorder tone="red" />
+                    </>
+                  ) : (
+                    <tr><td colSpan={2} className="py-1 px-2 italic text-slate-400 text-2xs">Tidak ada</td></tr>
+                  )}
+
+                  <tr className="bg-amber-50">
+                    <td className="py-1.5 px-2 font-bold text-xs uppercase">Total Kewajiban</td>
+                    <td className="py-1.5 px-2 text-right tabular-nums font-bold text-red-800">{fmt(n.totalKewajiban)}</td>
+                  </tr>
+
+                  <tr><td className="pt-3 pb-1 font-bold uppercase text-xs text-emerald-700" colSpan={2}>Ekuitas</td></tr>
+                  <Row label="Modal Disetor" value={n.modalDisetor} indent={1} tone="emerald" />
+                  <Row label="Laba Ditahan (akumulasi)" value={n.labaDitahan} indent={1} tone="emerald" />
+                  <Row label="Laba Tahun Berjalan" value={n.labaTahunBerjalan} indent={1} tone="emerald" />
+                  <Row label="Total Ekuitas" value={n.totalEkuitas} bold topBorder tone="emerald" />
+
+                  <tr className="bg-amber-100 border-y-2 border-amber-700">
+                    <td className="py-2 px-2 font-black uppercase text-xs">TOTAL KEWAJIBAN &amp; EKUITAS</td>
+                    <td className="py-2 px-2 text-right tabular-nums font-black text-amber-800">Rp {fmt(n.totalKewajibanEkuitas)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Catatan */}
+          <div className="mt-8 text-xs text-slate-600 border-t border-slate-300 pt-3">
+            <p className="font-semibold mb-1">Catatan:</p>
+            <ol className="list-decimal pl-5 space-y-0.5">
+              <li>Neraca disusun per tanggal akhir periode dari saldo transaksi terkini.</li>
+              <li>Kas = Saldo Kas Awal + Σ semua transaksi keuangan sampai tanggal neraca.</li>
+              <li>Piutang Usaha = Σ sisa tagihan Work Order yang belum lunas.</li>
+              <li>Persediaan = Σ stok × harga beli rata-rata.</li>
+              <li>Utang PPN = Σ PPN keluaran dari Work Order yang menggunakan PPN.</li>
+              <li>Aset tetap, utang manual, modal, dan laba ditahan diinput di Pengaturan.</li>
+            </ol>
+          </div>
+
+          {/* Tanda tangan */}
+          <div className="mt-10 flex justify-end">
+            <div className="text-center w-56">
+              <p className="text-xs mb-14">{cityShort(bs.kota) || 'Pekanbaru'}, {today}</p>
+              <div className="border-t border-slate-700 pt-1">
+                <p className="text-xs font-bold">{bs.namaPemilik || 'Bagian Keuangan'}</p>
+                <p className="text-xs text-slate-500">{bs.jabatanPemilik || bs.namaBengkel}</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );

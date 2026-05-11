@@ -149,6 +149,15 @@ const toDbSettings = (s: BengkelSettings) => ({
   nama_pemilik: s.namaPemilik,
   jabatan_pemilik: s.jabatanPemilik,
   default_termin_hari: s.defaultTerminHari ?? 0,
+  modal_awal: s.modalAwal ?? 0,
+  saldo_kas_awal: s.saldoKasAwal ?? 0,
+  tahun_buku: s.tahunBuku ?? null,
+  jenis_usaha: s.jenisUsaha ?? 'UMKM_PP55',
+  tarif_pph_manual: s.tarifPphManual ?? 0.5,
+  aset_tetap: s.asetTetap ?? [],
+  utang_jangka_pendek: s.utangJangkaPendek ?? [],
+  utang_jangka_panjang: s.utangJangkaPanjang ?? [],
+  laba_ditahan_awal: s.labaDitahanAwal ?? 0,
 });
 
 const fromDbSettings = (r: Record<string, unknown>): BengkelSettings => ({
@@ -162,6 +171,16 @@ const fromDbSettings = (r: Record<string, unknown>): BengkelSettings => ({
   namaPemilik: (r.nama_pemilik as string) ?? '',
   jabatanPemilik: (r.jabatan_pemilik as string) ?? '',
   defaultTerminHari: (r.default_termin_hari as number | null) ?? 0,
+  modalAwal: (r.modal_awal as number | null) ?? 0,
+  saldoKasAwal: (r.saldo_kas_awal as number | null) ?? 0,
+  tahunBuku: (r.tahun_buku as number | null) ?? undefined,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  jenisUsaha: ((r.jenis_usaha as any) ?? 'UMKM_PP55') as BengkelSettings['jenisUsaha'],
+  tarifPphManual: (r.tarif_pph_manual as number | null) ?? 0.5,
+  asetTetap: (r.aset_tetap as BengkelSettings['asetTetap']) ?? [],
+  utangJangkaPendek: (r.utang_jangka_pendek as BengkelSettings['utangJangkaPendek']) ?? [],
+  utangJangkaPanjang: (r.utang_jangka_panjang as BengkelSettings['utangJangkaPanjang']) ?? [],
+  labaDitahanAwal: (r.laba_ditahan_awal as number | null) ?? 0,
 });
 
 const toDbCus = (c: Customer) => ({

@@ -1,10 +1,13 @@
 import { useState } from 'react';
-import { Save, Building2, User, Phone, Mail, MapPin, FileText, Eye, EyeOff, Upload, Trash2, Lock, Loader2, ShieldCheck, CalendarClock } from 'lucide-react';
-import { useStore, type BengkelSettings } from '../store/useStore';
+import { Save, Building2, User, Phone, Mail, MapPin, FileText, Eye, EyeOff, Upload, Trash2, Lock, Loader2, ShieldCheck, CalendarClock, Calculator, Plus, Wallet, Landmark } from 'lucide-react';
+import { useStore, type BengkelSettings, type AsetTetap, type UtangManual, type JenisUsahaPajak } from '../store/useStore';
 import { toast } from '../lib/toast';
 import { supabase } from '../lib/supabase';
 import { Button, Section as UISection, TerminSelector } from '../components/ui';
 import { cityShort, fmtTanggal } from '../lib/format';
+
+const fmtRp = (n: number) => new Intl.NumberFormat('id-ID').format(n);
+const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
 function FormField({
   label, value, onChange, placeholder, icon: Icon, hint,
@@ -265,6 +268,192 @@ function PasswordChangePanel() {
   );
 }
 
+// ─── Editor list Aset Tetap (untuk Neraca) ──────────────────────
+function AsetTetapEditor({
+  items, onChange,
+}: { items: AsetTetap[]; onChange: (items: AsetTetap[]) => void }) {
+  const add = () => onChange([
+    ...items,
+    { id: uid(), nama: 'Aset Baru', kategori: 'Peralatan', hargaPerolehan: 0, akumulasiPenyusutan: 0 },
+  ]);
+  const update = (id: string, patch: Partial<AsetTetap>) =>
+    onChange(items.map(it => it.id === id ? { ...it, ...patch } : it));
+  const remove = (id: string) => onChange(items.filter(it => it.id !== id));
+
+  const total = items.reduce((s, a) => s + a.hargaPerolehan, 0);
+  const totalPenyusutan = items.reduce((s, a) => s + a.akumulasiPenyusutan, 0);
+  const nilaiBuku = total - totalPenyusutan;
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <h4 className="font-semibold text-slate-700 text-sm">Aset Tetap</h4>
+          <p className="text-tiny text-slate-400">Peralatan, kendaraan, bangunan — yang punya umur ekonomis &gt; 1 tahun.</p>
+        </div>
+        <Button variant="soft-emerald" onClick={add}><Plus className="w-4 h-4" /> Tambah Aset</Button>
+      </div>
+
+      {items.length === 0 ? (
+        <p className="text-xs text-slate-400 italic text-center py-4">Belum ada aset tetap.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50">
+                <th className="px-2 py-1.5 text-left font-semibold text-slate-500 uppercase tracking-wider">Nama Aset</th>
+                <th className="px-2 py-1.5 text-left font-semibold text-slate-500 uppercase tracking-wider w-32">Kategori</th>
+                <th className="px-2 py-1.5 text-right font-semibold text-slate-500 uppercase tracking-wider w-36">Harga Perolehan</th>
+                <th className="px-2 py-1.5 text-right font-semibold text-slate-500 uppercase tracking-wider w-36">Akumulasi Penyusutan</th>
+                <th className="px-2 py-1.5 text-right font-semibold text-slate-500 uppercase tracking-wider w-32">Nilai Buku</th>
+                <th className="w-10"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map(a => (
+                <tr key={a.id} className="border-b border-slate-100">
+                  <td className="px-2 py-1">
+                    <input type="text" value={a.nama}
+                      onChange={e => update(a.id, { nama: e.target.value })}
+                      aria-label="Nama aset"
+                      className="w-full px-2 py-1 border border-slate-200 rounded text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300" />
+                  </td>
+                  <td className="px-2 py-1">
+                    <select value={a.kategori}
+                      onChange={e => update(a.id, { kategori: e.target.value as AsetTetap['kategori'] })}
+                      aria-label="Kategori aset"
+                      className="w-full px-2 py-1 border border-slate-200 rounded text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 bg-white">
+                      <option value="Tanah">Tanah</option>
+                      <option value="Bangunan">Bangunan</option>
+                      <option value="Kendaraan">Kendaraan</option>
+                      <option value="Peralatan">Peralatan</option>
+                      <option value="Lainnya">Lainnya</option>
+                    </select>
+                  </td>
+                  <td className="px-2 py-1">
+                    <input type="number" min={0} value={a.hargaPerolehan}
+                      onChange={e => update(a.id, { hargaPerolehan: Number(e.target.value) || 0 })}
+                      aria-label="Harga perolehan"
+                      className="w-full px-2 py-1 border border-slate-200 rounded text-sm text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300" />
+                  </td>
+                  <td className="px-2 py-1">
+                    <input type="number" min={0} value={a.akumulasiPenyusutan}
+                      onChange={e => update(a.id, { akumulasiPenyusutan: Number(e.target.value) || 0 })}
+                      aria-label="Akumulasi penyusutan"
+                      className="w-full px-2 py-1 border border-slate-200 rounded text-sm text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300" />
+                  </td>
+                  <td className="px-2 py-1 text-right tabular-nums text-slate-700 font-medium">
+                    Rp {fmtRp(Math.max(a.hargaPerolehan - a.akumulasiPenyusutan, 0))}
+                  </td>
+                  <td className="px-2 py-1 text-center">
+                    <button onClick={() => remove(a.id)} title="Hapus aset" aria-label="Hapus aset"
+                      className="w-7 h-7 rounded bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center mx-auto">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-emerald-300 bg-emerald-50">
+                <td colSpan={2} className="px-2 py-1.5 font-bold text-emerald-800 text-xs uppercase">Total</td>
+                <td className="px-2 py-1.5 text-right font-bold text-emerald-800 tabular-nums">Rp {fmtRp(total)}</td>
+                <td className="px-2 py-1.5 text-right font-bold text-red-700 tabular-nums">Rp {fmtRp(totalPenyusutan)}</td>
+                <td className="px-2 py-1.5 text-right font-black text-emerald-900 tabular-nums">Rp {fmtRp(nilaiBuku)}</td>
+                <td />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Editor list Utang (Jangka Pendek / Jangka Panjang) ─────────
+function UtangEditor({
+  title, hint, icon: Icon, items, onChange,
+}: {
+  title: string; hint: string; icon: React.ElementType;
+  items: UtangManual[]; onChange: (items: UtangManual[]) => void;
+}) {
+  const add = () => onChange([...items, { id: uid(), nama: 'Utang Baru', nominal: 0 }]);
+  const update = (id: string, patch: Partial<UtangManual>) =>
+    onChange(items.map(it => it.id === id ? { ...it, ...patch } : it));
+  const remove = (id: string) => onChange(items.filter(it => it.id !== id));
+
+  const total = items.reduce((s, u) => s + u.nominal, 0);
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Icon className="w-4 h-4 text-slate-500" />
+          <div>
+            <h4 className="font-semibold text-slate-700 text-sm">{title}</h4>
+            <p className="text-tiny text-slate-400">{hint}</p>
+          </div>
+        </div>
+        <Button variant="soft-emerald" onClick={add}><Plus className="w-4 h-4" /> Tambah Utang</Button>
+      </div>
+
+      {items.length === 0 ? (
+        <p className="text-xs text-slate-400 italic text-center py-4">Belum ada.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50">
+                <th className="px-2 py-1.5 text-left font-semibold text-slate-500 uppercase tracking-wider">Nama Utang</th>
+                <th className="px-2 py-1.5 text-right font-semibold text-slate-500 uppercase tracking-wider w-40">Nominal</th>
+                <th className="px-2 py-1.5 text-left font-semibold text-slate-500 uppercase tracking-wider w-36">Jatuh Tempo</th>
+                <th className="w-10"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map(u => (
+                <tr key={u.id} className="border-b border-slate-100">
+                  <td className="px-2 py-1">
+                    <input type="text" value={u.nama}
+                      onChange={e => update(u.id, { nama: e.target.value })}
+                      aria-label="Nama utang"
+                      className="w-full px-2 py-1 border border-slate-200 rounded text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300" />
+                  </td>
+                  <td className="px-2 py-1">
+                    <input type="number" min={0} value={u.nominal}
+                      onChange={e => update(u.id, { nominal: Number(e.target.value) || 0 })}
+                      aria-label="Nominal utang"
+                      className="w-full px-2 py-1 border border-slate-200 rounded text-sm text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300" />
+                  </td>
+                  <td className="px-2 py-1">
+                    <input type="date" value={u.jatuhTempo ?? ''}
+                      onChange={e => update(u.id, { jatuhTempo: e.target.value || undefined })}
+                      aria-label="Jatuh tempo"
+                      className="w-full px-2 py-1 border border-slate-200 rounded text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300" />
+                  </td>
+                  <td className="px-2 py-1 text-center">
+                    <button onClick={() => remove(u.id)} title="Hapus utang" aria-label="Hapus utang"
+                      className="w-7 h-7 rounded bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center mx-auto">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-red-300 bg-red-50">
+                <td className="px-2 py-1.5 font-bold text-red-800 text-xs uppercase">Total</td>
+                <td className="px-2 py-1.5 text-right font-black text-red-900 tabular-nums">Rp {fmtRp(total)}</td>
+                <td colSpan={2} />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Settings() {
   const savedSettings = useStore(s => s.bengkelSettings);
   const updateBengkelSettings = useStore(s => s.updateBengkelSettings);
@@ -482,6 +671,95 @@ export default function Settings() {
               <div className="text-tiny text-slate-400 italic">
                 Saat ini default: <b>{(form.defaultTerminHari ?? 0) === 0 ? 'COD (Lunas di Tempat)' : `NET ${form.defaultTerminHari} hari`}</b>
               </div>
+            </div>
+          </UISection>
+
+          {/* Akuntansi & Pajak — untuk laporan Neraca & Laba Rugi (SPT Tahunan) */}
+          <UISection
+            title="Akuntansi & Pajak"
+            icon={Calculator}
+            accent="emerald"
+            rightSlot={<span className="text-tiny text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Untuk Laporan Pajak</span>}
+          >
+            <div className="flex flex-col gap-5">
+              <p className="text-xs text-slate-500">
+                Data berikut dipakai untuk menyusun <b>Neraca Keuangan</b> dan <b>Laporan Laba Rugi</b>
+                (cetak via Finance → Cetak Laporan Pajak). Pastikan modal awal, saldo kas, dan jenis usaha
+                terisi agar neraca <i>balance</i> (Aset = Kewajiban + Ekuitas).
+              </p>
+
+              {/* Scalar fields grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="s-modal" className="text-xs font-semibold text-slate-600 uppercase tracking-wide block mb-1">Modal Disetor (Rp)</label>
+                  <input id="s-modal" type="number" min={0} value={form.modalAwal ?? 0}
+                    onChange={e => { setForm(p => ({ ...p, modalAwal: Number(e.target.value) || 0 })); setDirty(true); }}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 bg-white" />
+                  <p className="text-tiny text-slate-400 mt-1">Pos Ekuitas: modal awal pemilik.</p>
+                </div>
+                <div>
+                  <label htmlFor="s-kas" className="text-xs font-semibold text-slate-600 uppercase tracking-wide block mb-1">Saldo Kas + Bank Awal (Rp)</label>
+                  <input id="s-kas" type="number" min={0} value={form.saldoKasAwal ?? 0}
+                    onChange={e => { setForm(p => ({ ...p, saldoKasAwal: Number(e.target.value) || 0 })); setDirty(true); }}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 bg-white" />
+                  <p className="text-tiny text-slate-400 mt-1">Saldo per awal periode buku (sebelum semua transaksi tercatat).</p>
+                </div>
+                <div>
+                  <label htmlFor="s-tahun" className="text-xs font-semibold text-slate-600 uppercase tracking-wide block mb-1">Tahun Buku</label>
+                  <input id="s-tahun" type="number" min={2000} max={2100} value={form.tahunBuku ?? new Date().getFullYear()}
+                    onChange={e => { setForm(p => ({ ...p, tahunBuku: Number(e.target.value) || new Date().getFullYear() })); setDirty(true); }}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 bg-white" />
+                </div>
+                <div>
+                  <label htmlFor="s-ld" className="text-xs font-semibold text-slate-600 uppercase tracking-wide block mb-1">Laba Ditahan Awal (Rp)</label>
+                  <input id="s-ld" type="number" value={form.labaDitahanAwal ?? 0}
+                    onChange={e => { setForm(p => ({ ...p, labaDitahanAwal: Number(e.target.value) || 0 })); setDirty(true); }}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 bg-white" />
+                  <p className="text-tiny text-slate-400 mt-1">Akumulasi laba dari tahun-tahun sebelumnya (manual).</p>
+                </div>
+                <div>
+                  <label htmlFor="s-jenis" className="text-xs font-semibold text-slate-600 uppercase tracking-wide block mb-1">Jenis Usaha (PPh)</label>
+                  <select id="s-jenis" value={form.jenisUsaha ?? 'UMKM_PP55'}
+                    onChange={e => { setForm(p => ({ ...p, jenisUsaha: e.target.value as JenisUsahaPajak })); setDirty(true); }}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 bg-white">
+                    <option value="UMKM_PP55">UMKM (PPh Final 0,5% × Omzet · PP 55/2022)</option>
+                    <option value="Badan">Badan (PPh 22% × Laba · UU HPP)</option>
+                    <option value="Manual">Tarif Manual</option>
+                  </select>
+                </div>
+                {form.jenisUsaha === 'Manual' && (
+                  <div>
+                    <label htmlFor="s-tarif" className="text-xs font-semibold text-slate-600 uppercase tracking-wide block mb-1">Tarif PPh Manual (%)</label>
+                    <input id="s-tarif" type="number" min={0} max={100} step={0.5} value={form.tarifPphManual ?? 0.5}
+                      onChange={e => { setForm(p => ({ ...p, tarifPphManual: Number(e.target.value) || 0 })); setDirty(true); }}
+                      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 bg-white" />
+                  </div>
+                )}
+              </div>
+
+              {/* Aset Tetap list */}
+              <AsetTetapEditor
+                items={form.asetTetap ?? []}
+                onChange={items => { setForm(p => ({ ...p, asetTetap: items })); setDirty(true); }}
+              />
+
+              {/* Utang Jangka Pendek list */}
+              <UtangEditor
+                title="Utang Jangka Pendek (≤ 1 Tahun)"
+                hint="Utang manual di luar utang PPN/PPh otomatis (mis. utang dagang, utang gaji belum dibayar)."
+                icon={Wallet}
+                items={form.utangJangkaPendek ?? []}
+                onChange={items => { setForm(p => ({ ...p, utangJangkaPendek: items })); setDirty(true); }}
+              />
+
+              {/* Utang Jangka Panjang list */}
+              <UtangEditor
+                title="Utang Jangka Panjang (> 1 Tahun)"
+                hint="Mis. Kredit Modal Kerja, Kredit Kendaraan Bermotor (KKB), utang investasi."
+                icon={Landmark}
+                items={form.utangJangkaPanjang ?? []}
+                onChange={items => { setForm(p => ({ ...p, utangJangkaPanjang: items })); setDirty(true); }}
+              />
             </div>
           </UISection>
 

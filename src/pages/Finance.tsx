@@ -479,9 +479,44 @@ export default function Finance() {
               <FileSpreadsheet className="w-4 h-4" /> <span className="hidden sm:inline">Export Excel</span>
             </Button>
           )}
-          <Button variant="secondary" onClick={() => window.open(`/erp/print/laporan-keuangan?period=${reportPeriod}`, '_blank')} title="Cetak PDF">
-            <Printer className="w-4 h-4" /> <span className="hidden sm:inline">Cetak PDF</span>
-          </Button>
+          <ActionMenu
+            ariaLabel="Pilih laporan untuk dicetak"
+            trigger={
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors">
+                <Printer className="w-4 h-4" /> <span className="hidden sm:inline">Cetak Laporan</span>
+                <ChevronDown className="w-3.5 h-3.5" />
+              </span>
+            }
+            actions={[
+              {
+                label: 'Laporan Keuangan (Internal)',
+                icon: FileText,
+                onClick: () => window.open(`/print/laporan-keuangan?period=${reportPeriod}`, '_blank'),
+              },
+              {
+                label: `Laporan Laba Rugi — ${reportPeriod}`,
+                icon: BarChart2,
+                separator: true,
+                onClick: () => window.open(`/print/laba-rugi?period=${reportPeriod}`, '_blank'),
+              },
+              {
+                label: `Laporan Laba Rugi — Tahun ${reportPeriod.slice(0, 4)}`,
+                icon: BarChart2,
+                onClick: () => window.open(`/print/laba-rugi?period=${reportPeriod.slice(0, 4)}`, '_blank'),
+              },
+              {
+                label: `Neraca per Akhir ${reportPeriod}`,
+                icon: Wallet,
+                separator: true,
+                onClick: () => window.open(`/print/neraca?period=${reportPeriod}`, '_blank'),
+              },
+              {
+                label: `Neraca per Akhir Tahun ${reportPeriod.slice(0, 4)}`,
+                icon: Wallet,
+                onClick: () => window.open(`/print/neraca?period=${reportPeriod.slice(0, 4)}`, '_blank'),
+              },
+            ]}
+          />
           {activeTab === 'table' && (
             <Button variant="primary" onClick={handleAdd} title="Catat Transaksi">
               <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Catat Transaksi</span>

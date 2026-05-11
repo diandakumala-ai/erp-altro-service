@@ -167,6 +167,252 @@ export const computeStatusBayar = (wo: WorkOrder, finance: FinanceTransaction[])
   return { status, totalBayar, sisaTagihan, jatuhTempo, hariKeJatuhTempo, isOverdue, isDueSoon };
 };
 
+// ═══════════════════════════════════════════════════════════════════
+// LABA RUGI & NERACA — Untuk Pelaporan Pajak Indonesia (SPT Tahunan)
+// ═══════════════════════════════════════════════════════════════════
+
+/** Periode akuntansi (rentang tanggal). */
+export interface Periode {
+  /** ISO date awal periode (inclusive). */
+  startDate: string;
+  /** ISO date akhir periode (inclusive). */
+  endDate: string;
+  /** Label periode (e.g. "Januari 2026", "Tahun 2026", "Triwulan I 2026"). */
+  label: string;
+}
+
+/** Hasil perhitungan Laporan Laba Rugi (format PSAK). */
+export interface LabaRugiData {
+  periode: Periode;
+  // Pendapatan
+  pendapatanJasa: number;        // Pendapatan dari servis/jasa
+  pendapatanLain: number;        // Pendapatan di luar usaha utama
+  totalPendapatan: number;
+  // Beban Pokok Pendapatan (HPP / COGS)
+  hppMaterial: number;           // Material/suku cadang yang dipakai
+  hppGajiProduksi: number;       // Gaji teknisi (jasa produksi)
+  totalHpp: number;
+  labaBruto: number;             // Pendapatan - HPP
+  // Beban Usaha (Operating Expenses)
+  bebanListrikOperasional: number;
+  bebanLainLain: number;         // Pengeluaran sub-kategori "Lain-lain" + tanpa sub
+  totalBebanUsaha: number;
+  labaOperasional: number;       // Laba Bruto - Beban Usaha
+  // Pajak
+  pphTerutang: number;           // Estimasi PPh (UMKM 0.5% omzet ATAU Badan 22% laba)
+  pphInfo: string;               // Penjelasan basis hitung PPh
+  labaBersih: number;            // Laba Operasional - PPh
+}
+
+/** Hasil perhitungan Neraca (format PSAK). */
+export interface NeracaData {
+  periode: Periode;
+  // ASET LANCAR (Current Assets)
+  kas: number;                   // Saldo kas + bank
+  piutangUsaha: number;          // Sisa tagihan WO belum lunas
+  persediaan: number;            // Nilai stok inventory (harga beli)
+  totalAsetLancar: number;
+  // ASET TETAP (Fixed Assets)
+  asetTetapBruto: number;        // Σ hargaPerolehan
+  akumulasiPenyusutan: number;   // Σ akumulasi
+  nilaiBukuAsetTetap: number;    // Bruto - Akumulasi
+  detailAsetTetap: AsetTetap[];
+  // TOTAL ASET
+  totalAset: number;
+  // KEWAJIBAN JANGKA PENDEK
+  utangPpn: number;              // Σ PPN keluaran dari WO usePpn (yg belum dibayar)
+  utangPph: number;              // PPh terutang dari Laba Rugi
+  utangJangkaPendekLain: UtangManual[];
+  totalUtangJangkaPendekLain: number;
+  totalKewajibanJangkaPendek: number;
+  // KEWAJIBAN JANGKA PANJANG
+  utangJangkaPanjang: UtangManual[];
+  totalKewajibanJangkaPanjang: number;
+  // TOTAL KEWAJIBAN
+  totalKewajiban: number;
+  // EKUITAS
+  modalDisetor: number;
+  labaDitahan: number;           // Laba periode sebelumnya (manual)
+  labaTahunBerjalan: number;     // Dari Laba Rugi
+  totalEkuitas: number;
+  // TOTAL KEWAJIBAN + EKUITAS
+  totalKewajibanEkuitas: number;
+  /**
+   * Selisih = totalAset - totalKewajibanEkuitas.
+   * Bila > 0 berarti ada aset/transaksi yang belum ter-record di neraca
+   * (misal modal & saldo kas awal belum di-set di Settings).
+   */
+  selisih: number;
+}
+
+/** Bentuk periode dari (start, end) ISO dates dengan label otomatis. */
+export function buildPeriode(startDate: string, endDate: string, label?: string): Periode {
+  return { startDate, endDate, label: label ?? `${startDate} s/d ${endDate}` };
+}
+
+/** Periode untuk satu bulan (YYYY-MM). */
+export function periodeBulan(yyyymm: string): Periode {
+  const [y, m] = yyyymm.split('-').map(Number);
+  const start = new Date(y, m - 1, 1);
+  const end = new Date(y, m, 0); // last day of month
+  const label = start.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+  return { startDate: start.toISOString().slice(0, 10), endDate: end.toISOString().slice(0, 10), label };
+}
+
+/** Periode untuk satu tahun fiskal (Jan–Des). */
+export function periodeTahun(year: number): Periode {
+  return {
+    startDate: `${year}-01-01`,
+    endDate: `${year}-12-31`,
+    label: `Tahun ${year}`,
+  };
+}
+
+/** Hitung Laporan Laba Rugi untuk periode tertentu. */
+export function computeLabaRugi(
+  workOrders: WorkOrder[],
+  finance: FinanceTransaction[],
+  settings: BengkelSettings,
+  periode: Periode,
+): LabaRugiData {
+  const inPeriode = (t: FinanceTransaction) =>
+    t.tanggal >= periode.startDate && t.tanggal <= periode.endDate;
+
+  const sum = (filter: (t: FinanceTransaction) => boolean) =>
+    Math.abs(finance.filter(t => inPeriode(t) && filter(t)).reduce((s, t) => s + t.nominal, 0));
+
+  // Pendapatan
+  const pendapatanJasa = sum(t =>
+    t.kategori === 'Pemasukan' &&
+    (t.subKategori === 'DP' || t.subKategori === 'Pelunasan' || t.subKategori === 'Pembayaran Servis'));
+  const pendapatanLain = sum(t => t.kategori === 'Pemasukan' && (t.subKategori === 'Lain-lain' || !t.subKategori));
+  const totalPendapatan = pendapatanJasa + pendapatanLain;
+
+  // HPP
+  const hppMaterial = sum(t => t.kategori === 'Pengeluaran' && t.subKategori === 'Material/Suku Cadang');
+  const hppGajiProduksi = sum(t => t.kategori === 'Pengeluaran' && t.subKategori === 'Gaji Teknisi');
+  const totalHpp = hppMaterial + hppGajiProduksi;
+  const labaBruto = totalPendapatan - totalHpp;
+
+  // Beban usaha
+  const bebanListrikOperasional = sum(t => t.kategori === 'Pengeluaran' && t.subKategori === 'Listrik & Operasional');
+  const bebanLainLain = sum(t => t.kategori === 'Pengeluaran' && (t.subKategori === 'Lain-lain' || !t.subKategori));
+  const totalBebanUsaha = bebanListrikOperasional + bebanLainLain;
+  const labaOperasional = labaBruto - totalBebanUsaha;
+
+  // PPh — tergantung jenis usaha
+  let pphTerutang = 0;
+  let pphInfo = '';
+  const jenis = settings.jenisUsaha ?? 'UMKM_PP55';
+  if (jenis === 'UMKM_PP55') {
+    // PPh Final 0.5% dari OMZET (PP 55/2022) — untuk peredaran bruto < 4.8M/tahun
+    pphTerutang = Math.round(totalPendapatan * 0.005);
+    pphInfo = 'PPh Final 0,5% × Omzet (PP 55/2022 — UMKM)';
+  } else if (jenis === 'Badan') {
+    // PPh Badan 22% dari laba sebelum pajak (UU HPP)
+    pphTerutang = labaOperasional > 0 ? Math.round(labaOperasional * 0.22) : 0;
+    pphInfo = 'PPh Badan 22% × Laba Sebelum Pajak (UU HPP)';
+  } else {
+    // Manual
+    const tarif = settings.tarifPphManual ?? 0;
+    pphTerutang = labaOperasional > 0 ? Math.round(labaOperasional * tarif / 100) : 0;
+    pphInfo = `Tarif manual ${tarif}% × Laba Sebelum Pajak`;
+  }
+  const labaBersih = labaOperasional - pphTerutang;
+
+  return {
+    periode,
+    pendapatanJasa, pendapatanLain, totalPendapatan,
+    hppMaterial, hppGajiProduksi, totalHpp,
+    labaBruto,
+    bebanListrikOperasional, bebanLainLain, totalBebanUsaha,
+    labaOperasional,
+    pphTerutang, pphInfo,
+    labaBersih,
+  };
+}
+
+/** Hitung Neraca untuk periode tertentu (per tanggal akhir periode). */
+export function computeNeraca(
+  workOrders: WorkOrder[],
+  finance: FinanceTransaction[],
+  inventory: InventoryItem[],
+  settings: BengkelSettings,
+  periode: Periode,
+): NeracaData {
+  // KAS: saldo awal + Σ finance sampai endDate
+  const saldoKasAwal = settings.saldoKasAwal ?? 0;
+  const arusKasSampaiPeriode = finance
+    .filter(t => t.tanggal <= periode.endDate)
+    .reduce((s, t) => s + t.nominal, 0);
+  const kas = saldoKasAwal + arusKasSampaiPeriode;
+
+  // PIUTANG: Σ sisa tagihan WO belum lunas
+  const piutangUsaha = workOrders
+    .filter(wo => wo.estimatedCost > 0)
+    .map(wo => computeStatusBayar(wo, finance))
+    .filter(p => p.status !== 'Lunas')
+    .reduce((s, p) => s + p.sisaTagihan, 0);
+
+  // PERSEDIAAN: Σ stok × hargaBeli
+  const persediaan = inventory.reduce((s, i) => s + (i.stok * i.hargaBeli), 0);
+
+  const totalAsetLancar = kas + piutangUsaha + persediaan;
+
+  // ASET TETAP
+  const asetTetapList = settings.asetTetap ?? [];
+  const asetTetapBruto = asetTetapList.reduce((s, a) => s + a.hargaPerolehan, 0);
+  const akumulasiPenyusutan = asetTetapList.reduce((s, a) => s + a.akumulasiPenyusutan, 0);
+  const nilaiBukuAsetTetap = asetTetapBruto - akumulasiPenyusutan;
+
+  const totalAset = totalAsetLancar + nilaiBukuAsetTetap;
+
+  // UTANG PPN: Σ PPN keluaran dari WO usePpn yang Finished/Picked Up
+  // (asumsi: PPN belum disetor — utang ke negara)
+  const utangPpn = workOrders
+    .filter(wo => wo.usePpn && wo.estimatedCost > 0)
+    .reduce((s, wo) => {
+      const base = Math.max(wo.estimatedCost - (wo.diskon ?? 0), 0);
+      return s + Math.round(base * ((wo.ppnPercent ?? 11) / 100));
+    }, 0);
+
+  // PPh dari Laba Rugi
+  const lr = computeLabaRugi(workOrders, finance, settings, periode);
+  const utangPph = lr.pphTerutang;
+
+  const utangJangkaPendekLain = settings.utangJangkaPendek ?? [];
+  const totalUtangJangkaPendekLain = utangJangkaPendekLain.reduce((s, u) => s + u.nominal, 0);
+  const totalKewajibanJangkaPendek = utangPpn + utangPph + totalUtangJangkaPendekLain;
+
+  const utangJangkaPanjang = settings.utangJangkaPanjang ?? [];
+  const totalKewajibanJangkaPanjang = utangJangkaPanjang.reduce((s, u) => s + u.nominal, 0);
+
+  const totalKewajiban = totalKewajibanJangkaPendek + totalKewajibanJangkaPanjang;
+
+  // EKUITAS
+  const modalDisetor = settings.modalAwal ?? 0;
+  const labaDitahan = settings.labaDitahanAwal ?? 0;
+  const labaTahunBerjalan = lr.labaBersih;
+  const totalEkuitas = modalDisetor + labaDitahan + labaTahunBerjalan;
+
+  const totalKewajibanEkuitas = totalKewajiban + totalEkuitas;
+  const selisih = totalAset - totalKewajibanEkuitas;
+
+  return {
+    periode,
+    kas, piutangUsaha, persediaan, totalAsetLancar,
+    asetTetapBruto, akumulasiPenyusutan, nilaiBukuAsetTetap, detailAsetTetap: asetTetapList,
+    totalAset,
+    utangPpn, utangPph,
+    utangJangkaPendekLain, totalUtangJangkaPendekLain,
+    totalKewajibanJangkaPendek,
+    utangJangkaPanjang, totalKewajibanJangkaPanjang,
+    totalKewajiban,
+    modalDisetor, labaDitahan, labaTahunBerjalan, totalEkuitas,
+    totalKewajibanEkuitas, selisih,
+  };
+}
+
 export interface BomItem {
   id: string;
   woId: string;
@@ -193,6 +439,35 @@ export interface Customer {
   totalWo: number;
 }
 
+/** Aset Tetap (peralatan, kendaraan, bangunan, dll) untuk Neraca. */
+export interface AsetTetap {
+  id: string;
+  nama: string;
+  kategori: 'Tanah' | 'Bangunan' | 'Kendaraan' | 'Peralatan' | 'Lainnya';
+  hargaPerolehan: number;
+  /** Akumulasi penyusutan sampai akhir periode buku. */
+  akumulasiPenyusutan: number;
+  tanggalPerolehan?: string;
+  /** Umur ekonomis dalam tahun (untuk hitung penyusutan garis lurus). Opsional. */
+  umurEkonomis?: number;
+}
+
+/** Utang manual (utang bank, utang lain-lain) — di luar utang dagang otomatis. */
+export interface UtangManual {
+  id: string;
+  nama: string;
+  nominal: number;
+  /** Jatuh tempo. Opsional. */
+  jatuhTempo?: string;
+}
+
+/** Jenis usaha untuk perhitungan PPh:
+ *  - 'UMKM_PP55' = PPh Final 0.5% dari OMZET (PP 55/2022, omzet < 4.8M/tahun)
+ *  - 'Badan' = PPh Badan 22% dari LABA SEBELUM PAJAK
+ *  - 'Manual' = pakai tarifPphManual
+ */
+export type JenisUsahaPajak = 'UMKM_PP55' | 'Badan' | 'Manual';
+
 export interface BengkelSettings {
   namaBengkel: string;
   alamat: string;
@@ -206,6 +481,26 @@ export interface BengkelSettings {
   logoUrl?: string;
   /** Termin pembayaran default untuk WO baru (hari). 0 = COD. Default: 0. */
   defaultTerminHari?: number;
+
+  // ─── Akuntansi / Pajak (untuk Neraca & Laba Rugi) ─────────────
+  /** Modal disetor / modal awal (Rp). Dipakai di pos Ekuitas Neraca. */
+  modalAwal?: number;
+  /** Saldo kas + bank awal periode buku (Rp). Default 0. */
+  saldoKasAwal?: number;
+  /** Tahun buku berjalan (mis. 2026). Default: tahun sekarang. */
+  tahunBuku?: number;
+  /** Jenis usaha untuk perhitungan PPh. Default: UMKM_PP55. */
+  jenisUsaha?: JenisUsahaPajak;
+  /** Tarif PPh manual (%, e.g. 22 untuk Badan, 0.5 untuk UMKM). */
+  tarifPphManual?: number;
+  /** Daftar aset tetap (untuk Neraca). */
+  asetTetap?: AsetTetap[];
+  /** Utang jangka pendek manual (≤1 tahun) — di luar utang PPN/PPh otomatis. */
+  utangJangkaPendek?: UtangManual[];
+  /** Utang jangka panjang manual (>1 tahun, mis. KMK, KKB). */
+  utangJangkaPanjang?: UtangManual[];
+  /** Laba ditahan dari periode-periode sebelumnya (manual). */
+  labaDitahanAwal?: number;
 }
 
 const SETTINGS_KEY = 'altro_bengkel_settings';
@@ -221,6 +516,15 @@ const defaultSettings: BengkelSettings = {
   namaPemilik: '',
   jabatanPemilik: 'Pimpinan',
   defaultTerminHari: 0,
+  modalAwal: 0,
+  saldoKasAwal: 0,
+  tahunBuku: new Date().getFullYear(),
+  jenisUsaha: 'UMKM_PP55',
+  tarifPphManual: 0.5,
+  asetTetap: [],
+  utangJangkaPendek: [],
+  utangJangkaPanjang: [],
+  labaDitahanAwal: 0,
 };
 
 export function loadBengkelSettings(): BengkelSettings {
