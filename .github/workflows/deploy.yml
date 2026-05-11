@@ -72,11 +72,18 @@ jobs:
       - name: Vercel CLI diagnostics
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           echo "== vercel --version =="
           vercel --version
-          echo "== vercel whoami (validates token) =="
-          vercel whoami --token="$VERCEL_TOKEN" || echo "::error::Token invalid/expired — generate new token di https://vercel.com/account/tokens dan update GH secret VERCEL_TOKEN."
+          echo "== vercel whoami =="
+          vercel whoami --token="$VERCEL_TOKEN"
+          echo "== ORG/PROJECT IDs (first 8 chars) =="
+          echo "ORG_ID prefix: ${VERCEL_ORG_ID:0:8}..."
+          echo "PROJECT_ID prefix: ${VERCEL_PROJECT_ID:0:8}..."
+          echo "== List teams (validate ORG_ID exists) =="
+          vercel teams ls --token="$VERCEL_TOKEN" || true
 
       - name: Link Vercel project (skip vercel pull)
         env:
@@ -85,7 +92,7 @@ jobs:
         run: |
           mkdir -p .vercel
           printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
-          echo "Linked: $(cat .vercel/project.json)"
+          cat .vercel/project.json
 
       - name: Deploy ke Vercel (Production)
         env:
@@ -93,9 +100,18 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
+          set +e
           vercel deploy \
             --prod \
             --yes \
+            --debug \
             --token="$VERCEL_TOKEN" \
             --build-env "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" \
-            --build-env "VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY"
+            --build-env "VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY" 2>&1 | tee /tmp/vercel-deploy.log
+          rc=${PIPESTATUS[0]}
+          echo "=== Exit code: $rc ==="
+          if [ "$rc" != "0" ]; then
+            echo "=== Last 80 lines of log ==="
+            tail -80 /tmp/vercel-deploy.log
+          fi
+          exit $rc
