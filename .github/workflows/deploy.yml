@@ -65,8 +65,18 @@ jobs:
           done
           if [ "$missing" = "1" ]; then exit 1; fi
 
+      # Pin ke versi yang stabil; @latest kadang regression.
       - name: Install Vercel CLI
-        run: npm install --global vercel@latest
+        run: npm install --global vercel@39
+
+      - name: Vercel CLI diagnostics
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          echo "== vercel --version =="
+          vercel --version
+          echo "== vercel whoami (validates token) =="
+          vercel whoami --token="$VERCEL_TOKEN" || echo "::error::Token invalid/expired — generate new token di https://vercel.com/account/tokens dan update GH secret VERCEL_TOKEN."
 
       - name: Link Vercel project (skip vercel pull)
         env:
@@ -75,6 +85,7 @@ jobs:
         run: |
           mkdir -p .vercel
           printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+          echo "Linked: $(cat .vercel/project.json)"
 
       - name: Deploy ke Vercel (Production)
         env:
@@ -86,7 +97,5 @@ jobs:
             --prod \
             --yes \
             --token="$VERCEL_TOKEN" \
-            --no-clipboard \
-            --archive=tgz \
             --build-env "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" \
             --build-env "VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY"
