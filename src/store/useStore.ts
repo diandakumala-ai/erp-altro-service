@@ -284,6 +284,44 @@ function withRecomputedTotalWo(customers: Customer[], workOrders: WorkOrder[]): 
 }
 
 /**
+ * Sesuaikan `inventory.stok` untuk barang yang nama-nya match (case-insensitive)
+ * dengan `barang`. Delta negatif = konsumsi (dipakai untuk WO), positif = restore
+ * (BOM dihapus / qty diperkecil).
+ *
+ * Tidak block jika stok menjadi negatif — workshop servis sering pakai material
+ * dulu, beli kemudian. Tapi warning di-emit via toast supaya operator tahu untuk
+ * segera order ulang.
+ *
+ * Persist ke Supabase via db.inventory.upsert untuk inventory yang berubah.
+ * Return inventory array baru. Bila barang tidak match item inventory, return
+ * input apa adanya (no-op).
+ */
+function adjustInventoryStock(
+  inventory: InventoryItem[],
+  barang: string,
+  delta: number,
+): InventoryItem[] {
+  const key = (barang || '').trim().toLowerCase();
+  if (!key || delta === 0) return inventory;
+  let touched = false;
+  const next = inventory.map(inv => {
+    if (inv.nama.trim().toLowerCase() !== key) return inv;
+    touched = true;
+    const newStok = inv.stok + delta;
+    const updated = { ...inv, stok: newStok };
+    db.inventory.upsert(updated);
+    // Warn kalau konsumsi bikin stok negatif (over-issue). Catatan: stok bisa
+    // sengaja negatif karena workflow servis (pakai dulu, beli kemudian) —
+    // tidak block, hanya kasih notif.
+    if (delta < 0 && inv.stok >= 0 && newStok < 0) {
+      toast.info(`Stok "${inv.nama}" minus (${newStok} ${inv.satuan}). Catat pembelian segera.`);
+    }
+    return updated;
+  });
+  return touched ? next : inventory;
+}
+
+/**
  * Cari customer yang match (by name) dengan `wo.customer`, atau create baru bila
  * tidak ada. Return `[customers list, matched/created customer id]`.
  *
@@ -1032,33 +1070,73 @@ export const useStore = create<AppState>((set) => ({
     set((state) => ({ finance: state.finance.filter(trx => trx.id !== id) }));
   },
 
+  // ─── BOM actions: stok inventory ter-sync dengan BOM mutation ─────────────
+  // Konvensi: BOM = material yang DIPAKAI untuk WO. Add BOM → stok berkurang;
+  // hapus BOM → stok kembali; ubah qty → adjust selisih.
+  // Auto-create inventory bila barang baru: stok awal = (input stok) - jumlah.
+
   updateBom: (updatedBom) => set((state) => {
-    const newInventory = [...state.inventory];
+    const prevBom = state.boms.find(b => b.id === updatedBom.id);
     const namaBarang = updatedBom.barang.trim();
+
+    let newInventory = state.inventory;
+
+    // Auto-create inventory bila barang baru — stok awal sudah dikurangi jumlah.
     if (namaBarang && !newInventory.some(i => i.nama.toLowerCase() === namaBarang.toLowerCase())) {
       const maxId = newInventory.reduce((max, i) => { const n = parseInt(i.id.split('-').at(-1) || '0', 10); return !isNaN(n) && n > max ? n : max; }, 0);
-      const newInv = { id: `SKU-${String(maxId + 1).padStart(3, '0')}`, nama: namaBarang, stok: updatedBom.stok, satuan: updatedBom.satuan, batasMinimum: 5, hargaBeli: Math.round(updatedBom.harga * 0.8), hargaJual: updatedBom.harga };
-      newInventory.push(newInv);
+      const newInv = { id: `SKU-${String(maxId + 1).padStart(3, '0')}`, nama: namaBarang, stok: Math.max(updatedBom.stok - updatedBom.jumlah, 0), satuan: updatedBom.satuan, batasMinimum: 5, hargaBeli: Math.round(updatedBom.harga * 0.8), hargaJual: updatedBom.harga };
+      newInventory = [...newInventory, newInv];
       db.inventory.upsert(newInv);
+      // Sudah accounted via stok awal — skip adjustInventoryStock untuk add.
+    } else if (prevBom && prevBom.barang.trim().toLowerCase() === namaBarang.toLowerCase()) {
+      // Same barang, beda qty. Delta konsumsi = (new - prev). Negatif delta inventory.
+      const deltaConsumed = updatedBom.jumlah - prevBom.jumlah;
+      newInventory = adjustInventoryStock(newInventory, namaBarang, -deltaConsumed);
+    } else if (prevBom) {
+      // Barang berubah — rollback prev, apply new
+      newInventory = adjustInventoryStock(newInventory, prevBom.barang, prevBom.jumlah);
+      newInventory = adjustInventoryStock(newInventory, namaBarang, -updatedBom.jumlah);
+    } else {
+      // Edge: updateBom tanpa prev (jarang). Treat as new consumption.
+      newInventory = adjustInventoryStock(newInventory, namaBarang, -updatedBom.jumlah);
     }
+
     db.boms.upsert(updatedBom);
     return { boms: state.boms.map(bom => bom.id === updatedBom.id ? updatedBom : bom), inventory: newInventory };
   }),
+
   addBom: (bom) => set((state) => {
-    const newInventory = [...state.inventory];
     const namaBarang = bom.barang.trim();
+    let newInventory = state.inventory;
+
     if (namaBarang && !newInventory.some(i => i.nama.toLowerCase() === namaBarang.toLowerCase())) {
+      // Auto-create inventory baru — stok awal sudah dikurangi qty BOM ini.
       const maxId = newInventory.reduce((max, i) => { const n = parseInt(i.id.split('-').at(-1) || '0', 10); return !isNaN(n) && n > max ? n : max; }, 0);
-      const newInv = { id: `SKU-${String(maxId + 1).padStart(3, '0')}`, nama: namaBarang, stok: bom.stok, satuan: bom.satuan, batasMinimum: 5, hargaBeli: Math.round(bom.harga * 0.8), hargaJual: bom.harga };
-      newInventory.push(newInv);
+      const newInv = { id: `SKU-${String(maxId + 1).padStart(3, '0')}`, nama: namaBarang, stok: Math.max(bom.stok - bom.jumlah, 0), satuan: bom.satuan, batasMinimum: 5, hargaBeli: Math.round(bom.harga * 0.8), hargaJual: bom.harga };
+      newInventory = [...newInventory, newInv];
       db.inventory.upsert(newInv);
+    } else if (namaBarang) {
+      // Barang sudah ada di inventory — decrement
+      newInventory = adjustInventoryStock(newInventory, namaBarang, -bom.jumlah);
     }
+
     db.boms.upsert(bom);
     return { boms: [...state.boms, bom], inventory: newInventory };
   }),
+
   removeBom: (id) => {
     db.boms.delete(id);
-    set((state) => ({ boms: state.boms.filter(bom => bom.id !== id) }));
+    set((state) => {
+      const prevBom = state.boms.find(b => b.id === id);
+      // Restore stok yang sebelumnya dipakai oleh BOM ini.
+      const newInventory = prevBom
+        ? adjustInventoryStock(state.inventory, prevBom.barang, prevBom.jumlah)
+        : state.inventory;
+      return {
+        boms: state.boms.filter(bom => bom.id !== id),
+        inventory: newInventory,
+      };
+    });
   },
 
   updateService: (updatedSvc) => {
