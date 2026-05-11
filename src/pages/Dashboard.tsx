@@ -5,33 +5,11 @@ import {
   Clock, CheckCircle, Users, ArrowRight, Activity,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { StatusPill, WO_STATUS, isFinished } from '../components/ui';
+import { StatusPill, WO_STATUS, isFinished, StatCard } from '../components/ui';
 import { fmt, fmtShort } from '../lib/format';
 
 // Re-export untuk backward compatibility (WorkOrders.tsx pakai ini)
 export { StatusPill };
-
-function KpiCard({
-  title, value, sub, icon: Icon, color, to
-}: {
-  title: string; value: string; sub?: string;
-  icon: React.ElementType; color: string; to?: string;
-}) {
-  const inner = (
-    <div className={`bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex items-start justify-between group transition-all hover:shadow-md ${to ? 'cursor-pointer hover:border-indigo-300' : ''}`}>
-      <div>
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{title}</p>
-        <p className="text-2xl font-black text-slate-800 mt-1">{value}</p>
-        {sub && <p className="text-xs text-slate-500 mt-1">{sub}</p>}
-      </div>
-      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${color}`}>
-        <Icon className="w-5 h-5" />
-      </div>
-      {to && <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 absolute right-4 bottom-4 transition-colors" />}
-    </div>
-  );
-  return to ? <Link to={to} className="relative block">{inner}</Link> : <div className="relative">{inner}</div>;
-}
 
 export default function Dashboard() {
   const workOrders = useStore(s => s.workOrders);
@@ -121,38 +99,46 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* KPI Cards */}
+        {/* KPI Cards — pakai StatCard shared (variant=full) untuk konsistensi palette. */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-          <KpiCard
-            title="Revenue Bulan Ini"
+          <StatCard
+            variant="full"
+            label="Revenue Bulan Ini"
             value={`Rp ${fmtShort(stats.revBulanIni)}`}
-            sub={`Pengeluaran: Rp ${fmtShort(stats.expBulanIni)}`}
+            hint={`Pengeluaran: Rp ${fmtShort(stats.expBulanIni)}`}
+            accent="emerald"
             icon={TrendingUp}
-            color="bg-emerald-100 text-emerald-600"
+            iconBg="bg-emerald-100 text-emerald-600"
             to="/finance"
           />
-          <KpiCard
-            title="WO Aktif"
+          <StatCard
+            variant="full"
+            label="WO Aktif"
             value={String(stats.aktif.length)}
-            sub={`${stats.selesai.length} sudah selesai`}
+            hint={`${stats.selesai.length} sudah selesai`}
+            accent="indigo"
             icon={Wrench}
-            color="bg-indigo-100 text-indigo-600"
+            iconBg="bg-indigo-100 text-indigo-600"
             to="/work-orders"
           />
-          <KpiCard
-            title="Piutang Belum Lunas"
+          <StatCard
+            variant="full"
+            label="Piutang Belum Lunas"
             value={`Rp ${fmtShort(stats.totalPiutang)}`}
-            sub={`${stats.piutangWOs.length} WO belum lunas`}
+            hint={`${stats.piutangWOs.length} WO belum lunas`}
+            accent="amber"
             icon={TrendingDown}
-            color="bg-orange-100 text-orange-600"
+            iconBg="bg-amber-100 text-amber-700"
             to="/finance"
           />
-          <KpiCard
-            title="Total Pelanggan"
+          <StatCard
+            variant="full"
+            label="Total Pelanggan"
             value={String(customers.length)}
-            sub={`${customers.filter(c => c.totalWo > 0).length} pelanggan aktif`}
+            hint={`${customers.filter(c => c.totalWo > 0).length} pelanggan aktif`}
+            accent="slate"
             icon={Users}
-            color="bg-purple-100 text-purple-600"
+            iconBg="bg-slate-100 text-slate-600"
             to="/customers"
           />
         </div>
