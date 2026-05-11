@@ -457,11 +457,11 @@ export default function Finance() {
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {/* Export Excel — kontekstual per tab */}
+          {/* Export Excel — kontekstual per tab. Mobile: icon-only. */}
           {activeTab === 'table' && (
             <Button variant="success" title="Export Buku Kas ke Excel"
               onClick={() => { exportBukuKas(finance); toast.success('Buku Kas berhasil di-export!'); }}>
-              <FileSpreadsheet className="w-4 h-4" /> Export Excel
+              <FileSpreadsheet className="w-4 h-4" /> <span className="hidden sm:inline">Export Excel</span>
             </Button>
           )}
           {activeTab === 'report' && (
@@ -470,21 +470,21 @@ export default function Finance() {
                 exportLaporanLengkap(finance, workOrders, inventory, [], reportPeriod);
                 toast.success(`Laporan ${reportLabel} berhasil di-export!`);
               }}>
-              <FileSpreadsheet className="w-4 h-4" /> Export Excel
+              <FileSpreadsheet className="w-4 h-4" /> <span className="hidden sm:inline">Export Excel</span>
             </Button>
           )}
           {activeTab === 'piutang' && (
             <Button variant="success" title="Export piutang ke Excel"
               onClick={() => { exportPiutang(workOrders, finance); toast.success('Data piutang berhasil di-export!'); }}>
-              <FileSpreadsheet className="w-4 h-4" /> Export Excel
+              <FileSpreadsheet className="w-4 h-4" /> <span className="hidden sm:inline">Export Excel</span>
             </Button>
           )}
-          <Button variant="secondary" onClick={() => window.open(`/erp/print/laporan-keuangan?period=${reportPeriod}`, '_blank')}>
-            <Printer className="w-4 h-4" /> Cetak PDF
+          <Button variant="secondary" onClick={() => window.open(`/erp/print/laporan-keuangan?period=${reportPeriod}`, '_blank')} title="Cetak PDF">
+            <Printer className="w-4 h-4" /> <span className="hidden sm:inline">Cetak PDF</span>
           </Button>
           {activeTab === 'table' && (
-            <Button variant="primary" onClick={handleAdd}>
-              <Plus className="w-4 h-4" /> Catat Transaksi
+            <Button variant="primary" onClick={handleAdd} title="Catat Transaksi">
+              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Catat Transaksi</span>
             </Button>
           )}
         </div>

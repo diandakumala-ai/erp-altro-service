@@ -295,13 +295,14 @@ export default function Settings() {
         <h2 className="text-base font-semibold text-slate-800">Pengaturan Sistem</h2>
         <div className="flex items-center gap-2">
           {dirty && (
-            <Button variant="secondary" onClick={handleReset}>
-              Batalkan Perubahan
+            <Button variant="secondary" onClick={handleReset} title="Batalkan Perubahan">
+              <span className="hidden sm:inline">Batalkan Perubahan</span>
+              <span className="sm:hidden">Batal</span>
             </Button>
           )}
-          <Button variant="primary" onClick={handleSave} disabled={!dirty}>
+          <Button variant="primary" onClick={handleSave} disabled={!dirty} title="Simpan Pengaturan">
             <Save className="w-4 h-4" />
-            Simpan Pengaturan
+            <span className="hidden sm:inline">Simpan Pengaturan</span>
           </Button>
         </div>
       </header>

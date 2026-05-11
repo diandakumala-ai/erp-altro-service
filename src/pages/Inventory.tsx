@@ -80,11 +80,11 @@ export default function Inventory() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="success" onClick={() => { exportInventory(inventory); toast.success('Data Inventory berhasil di-export!'); }}>
-            <FileSpreadsheet className="w-4 h-4" /> Export Excel
+          <Button variant="success" onClick={() => { exportInventory(inventory); toast.success('Data Inventory berhasil di-export!'); }} title="Export Excel">
+            <FileSpreadsheet className="w-4 h-4" /> <span className="hidden sm:inline">Export Excel</span>
           </Button>
-          <Button variant="primary" onClick={handleAdd}>
-            <Plus className="w-4 h-4" /> Barang Baru
+          <Button variant="primary" onClick={handleAdd} title="Barang Baru">
+            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Barang Baru</span>
           </Button>
         </div>
       </header>

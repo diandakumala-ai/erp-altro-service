@@ -72,11 +72,12 @@ export default function Customers() {
       <header className="bg-white border-b border-slate-200 h-12 flex items-center pl-14 pr-14 lg:px-6 justify-between shrink-0">
         <h2 className="text-base font-semibold text-slate-800">Data Pelanggan (Customers)</h2>
         <div className="flex items-center gap-2">
-          <Button variant="success" onClick={handleExport}>
-            <FileSpreadsheet className="w-4 h-4" /> Export Excel
+          {/* Mobile: icon-only (label hidden). Desktop: full label. */}
+          <Button variant="success" onClick={handleExport} title="Export Excel">
+            <FileSpreadsheet className="w-4 h-4" /> <span className="hidden sm:inline">Export Excel</span>
           </Button>
-          <Button variant="primary" onClick={handleAdd}>
-            <Plus className="w-4 h-4" /> Pelanggan Baru
+          <Button variant="primary" onClick={handleAdd} title="Pelanggan Baru">
+            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Pelanggan Baru</span>
           </Button>
         </div>
       </header>

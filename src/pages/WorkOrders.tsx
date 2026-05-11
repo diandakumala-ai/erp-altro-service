@@ -343,11 +343,11 @@ export default function WorkOrders() {
       <header className="bg-white border-b border-slate-200 h-12 flex items-center pl-14 pr-14 lg:px-6 justify-between shrink-0">
         <h2 className="text-base font-semibold text-slate-800">Manajemen Pekerjaan (Work Orders)</h2>
         <div className="flex items-center gap-2">
-          <Button variant="success" onClick={() => { exportWorkOrders(workOrders, finance); toast.success('Data Work Orders berhasil di-export!'); }}>
-            <FileSpreadsheet className="w-4 h-4" /> Export Excel
+          <Button variant="success" onClick={() => { exportWorkOrders(workOrders, finance); toast.success('Data Work Orders berhasil di-export!'); }} title="Export Excel">
+            <FileSpreadsheet className="w-4 h-4" /> <span className="hidden sm:inline">Export Excel</span>
           </Button>
-          <Button variant="primary" size="md" onClick={handleAddWO}>
-            <Plus className="w-4 h-4" /> SPK Baru
+          <Button variant="primary" size="md" onClick={handleAddWO} title="SPK Baru">
+            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">SPK Baru</span>
           </Button>
         </div>
       </header>
