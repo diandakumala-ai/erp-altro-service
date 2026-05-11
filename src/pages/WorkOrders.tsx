@@ -546,7 +546,7 @@ export default function WorkOrders() {
           }
         >
           <div className="p-6 flex flex-col gap-5">
-              <div className="bg-blue-50 border border-blue-200 px-4 py-3 rounded-lg text-sm text-blue-800">
+              <div className="bg-indigo-50 border border-indigo-200 px-4 py-3 rounded-lg text-sm text-indigo-800">
                 Edit nilai di sel secara langsung. Klik <b>Simpan & Update Biaya WO</b> untuk memperbarui total biaya.
               </div>
 
@@ -777,7 +777,7 @@ export default function WorkOrders() {
                 const baseAfterDiskon = Math.max(selectedWO.estimatedCost - (selectedWO.diskon ?? 0), 0);
                 const ppnNominal = usePpn ? Math.round(baseAfterDiskon * (ppnPercent / 100)) : 0;
                 return (
-                  <div className="bg-white border border-sky-200 rounded-lg shadow-sm p-4">
+                  <div className="bg-white border border-indigo-200 rounded-lg shadow-sm p-4">
                     <div className="mb-3">
                       <h4 className="font-semibold text-slate-700">Pajak (PPN)</h4>
                       <p className="text-xs text-slate-400 mt-0.5">
@@ -803,10 +803,10 @@ export default function WorkOrders() {
                             }
                           }}
                           aria-pressed={usePpn === opt.v}
-                          className={`px-3 py-1.5 text-xs font-semibold rounded-lg border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 ${
+                          className={`px-3 py-1.5 text-xs font-semibold rounded-lg border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 ${
                             usePpn === opt.v
-                              ? 'bg-sky-600 border-sky-600 text-white shadow-sm'
-                              : 'bg-white border-slate-200 text-slate-600 hover:border-sky-300 hover:text-sky-700'
+                              ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                              : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-700'
                           }`}
                         >
                           {opt.label}
@@ -820,7 +820,7 @@ export default function WorkOrders() {
                         <div className="flex items-end gap-2 flex-wrap">
                           <div className="w-32">
                             <label htmlFor="ppn-pct" className="text-xs text-slate-500 font-medium block mb-1">Persentase PPN</label>
-                            <div className="flex items-center border border-slate-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-sky-400">
+                            <div className="flex items-center border border-slate-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-indigo-400">
                               <input
                                 id="ppn-pct"
                                 type="number"
@@ -846,7 +846,7 @@ export default function WorkOrders() {
                                   key={p}
                                   type="button"
                                   onClick={() => setSelectedWO({ ...selectedWO, ppnPercent: p })}
-                                  className="px-1.5 py-0.5 text-2xs font-semibold border border-slate-200 rounded text-slate-600 hover:bg-sky-50 hover:border-sky-300 hover:text-sky-700 transition-colors"
+                                  className="px-1.5 py-0.5 text-2xs font-semibold border border-slate-200 rounded text-slate-600 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700 transition-colors"
                                 >
                                   {p}%
                                 </button>
@@ -861,9 +861,9 @@ export default function WorkOrders() {
                             <p className="text-tiny text-slate-500 font-semibold uppercase tracking-wider">DPP (Setelah Diskon)</p>
                             <p className="text-sm font-bold text-slate-700">Rp {fmt(baseAfterDiskon)}</p>
                           </div>
-                          <div className="bg-sky-50 border border-sky-200 rounded-lg px-3 py-2">
-                            <p className="text-tiny text-sky-600 font-semibold uppercase tracking-wider">PPN ({ppnPercent}%)</p>
-                            <p className="text-sm font-bold text-sky-700">Rp {fmt(ppnNominal)}</p>
+                          <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2">
+                            <p className="text-tiny text-indigo-600 font-semibold uppercase tracking-wider">PPN ({ppnPercent}%)</p>
+                            <p className="text-sm font-bold text-indigo-700">Rp {fmt(ppnNominal)}</p>
                           </div>
                           <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2">
                             <p className="text-tiny text-indigo-600 font-semibold uppercase tracking-wider">Total Tagihan</p>

@@ -69,12 +69,15 @@ const TYPE_ICON: Record<NotifType, React.ElementType> = {
   piutang:        DollarSign,
 };
 
+// Palette resmi (lib/colors.ts): emerald/red/amber/indigo/slate.
+// Mapping intent: jatuhTempo & overdue = red (urgent), akanJatuhTempo & stok &
+// piutang-belum-tempo = amber (perlu perhatian, belum kritis).
 const TYPE_ICON_COLOR: Record<NotifType, string> = {
   jatuhTempo:     'text-red-600 bg-red-50',
   akanJatuhTempo: 'text-amber-600 bg-amber-50',
   overdue:        'text-red-500 bg-red-50',
   stok:           'text-amber-600 bg-amber-50',
-  piutang:        'text-orange-600 bg-orange-50',
+  piutang:        'text-amber-600 bg-amber-50',
 };
 
 const BADGE_TONE: Record<NonNullable<NotifItem['badge']>['tone'], string> = {
@@ -631,7 +634,7 @@ export function NotificationBell() {
               <NotifSection
                 label="SPK Telat Selesai"
                 icon={Clock}
-                color="bg-rose-50 text-rose-700 border-b border-rose-100"
+                color="bg-red-50 text-red-700 border-b border-red-100"
                 items={sliced.overdue.items}
                 hiddenCount={sliced.overdue.hidden}
                 viewAllTo="/work-orders"
@@ -641,7 +644,7 @@ export function NotificationBell() {
               <NotifSection
                 label="Stok Kritis"
                 icon={Package}
-                color="bg-yellow-50 text-yellow-800 border-b border-yellow-100"
+                color="bg-amber-50 text-amber-800 border-b border-amber-100"
                 items={sliced.stok.items}
                 hiddenCount={sliced.stok.hidden}
                 viewAllTo="/inventory"
@@ -651,7 +654,7 @@ export function NotificationBell() {
               <NotifSection
                 label="Piutang Belum Tempo"
                 icon={DollarSign}
-                color="bg-orange-50 text-orange-700 border-b border-orange-100"
+                color="bg-amber-50 text-amber-700 border-b border-amber-100"
                 items={sliced.piutangLain.items}
                 hiddenCount={sliced.piutangLain.hidden}
                 viewAllTo="/finance"

@@ -141,9 +141,10 @@ export default function PrintTemplates() {
               <p className="text-2xs font-bold text-red-600 uppercase tracking-widest mb-1">Total Pengeluaran</p>
               <p className="text-xl font-black text-red-800">Rp {fmt(totalPengeluaran)}</p>
             </div>
-            <div className={`border-2 rounded-lg p-4 text-center ${labaBersih >= 0 ? 'border-indigo-200 bg-indigo-50' : 'border-orange-200 bg-orange-50'}`}>
-              <p className={`text-2xs font-bold uppercase tracking-widest mb-1 ${labaBersih >= 0 ? 'text-indigo-600' : 'text-orange-600'}`}>{labaBersih >= 0 ? 'Laba Bersih' : 'Rugi Bersih'}</p>
-              <p className={`text-xl font-black ${labaBersih >= 0 ? 'text-indigo-900' : 'text-orange-800'}`}>Rp {fmt(Math.abs(labaBersih))}</p>
+            {/* Rugi = red (palette resmi), bukan orange. Laba = indigo. */}
+            <div className={`border-2 rounded-lg p-4 text-center ${labaBersih >= 0 ? 'border-indigo-200 bg-indigo-50' : 'border-red-200 bg-red-50'}`}>
+              <p className={`text-2xs font-bold uppercase tracking-widest mb-1 ${labaBersih >= 0 ? 'text-indigo-600' : 'text-red-600'}`}>{labaBersih >= 0 ? 'Laba Bersih' : 'Rugi Bersih'}</p>
+              <p className={`text-xl font-black ${labaBersih >= 0 ? 'text-indigo-900' : 'text-red-800'}`}>Rp {fmt(Math.abs(labaBersih))}</p>
             </div>
           </div>
 

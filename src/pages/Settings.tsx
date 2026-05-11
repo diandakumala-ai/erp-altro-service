@@ -487,8 +487,8 @@ export default function Settings() {
           {/* Akun & Keamanan */}
           <PasswordChangePanel />
 
-          {/* Info */}
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-700">
+          {/* Info — palette indigo (info, palette resmi), bukan blue. */}
+          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-xs text-indigo-700">
             <p className="font-semibold mb-1">ℹ️ Catatan</p>
             <p>Pengaturan ini disimpan di perangkat ini (browser). Data akan tetap ada selama Anda tidak menghapus data browser. Kop surat pada semua dokumen cetak (SPK, Invoice, Laporan) akan otomatis menggunakan data ini.</p>
           </div>

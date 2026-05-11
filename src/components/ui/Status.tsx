@@ -18,13 +18,17 @@ interface StatusConfig {
   icon: React.ElementType;
 }
 
+// Palette resmi: emerald/red/amber/indigo/slate (lihat lib/colors.ts).
+// Progression intent: slate (menunggu) → amber (perhatian) → indigo (aktif)
+// → emerald (selesai). Picked Up = emerald lighter (final/archived).
+// Tidak hanya warna — icon juga membedakan (WCAG-compliant).
 const STATUS_CONFIG: Record<WOStatus, StatusConfig> = {
-  'Queue':      { bg: 'bg-slate-100 text-slate-600',   icon: Clock },
-  'Inspecting': { bg: 'bg-amber-100 text-amber-700',   icon: Eye },
-  'Repairing':  { bg: 'bg-blue-100 text-blue-700',     icon: Wrench },
-  'Testing':    { bg: 'bg-purple-100 text-purple-700', icon: FlaskConical },
+  'Queue':      { bg: 'bg-slate-100 text-slate-600',     icon: Clock },
+  'Inspecting': { bg: 'bg-amber-100 text-amber-700',     icon: Eye },
+  'Repairing':  { bg: 'bg-indigo-100 text-indigo-700',   icon: Wrench },
+  'Testing':    { bg: 'bg-indigo-50 text-indigo-700',    icon: FlaskConical },
   'Finished':   { bg: 'bg-emerald-100 text-emerald-700', icon: CheckCircle },
-  'Picked Up':  { bg: 'bg-teal-100 text-teal-700',     icon: PackageCheck },
+  'Picked Up':  { bg: 'bg-emerald-50 text-emerald-700',  icon: PackageCheck },
 };
 
 const FALLBACK: StatusConfig = { bg: 'bg-slate-100 text-slate-600', icon: Clock };
