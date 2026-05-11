@@ -60,78 +60,52 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@39
 
-      - name: Cari project Vercel via API (auto-discover, bypass PROJECT_ID secret)
+      - name: Resolve Vercel ORG_ID untuk PROJECT_ID yang sudah fix
         id: discover
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
+          # PROJECT_ID di-hardcode sesuai instruksi user — lebih reliable daripada cari-nama
+          # (project Vercel pernah ganti nama: erp / erp-app / erp-altro-service).
+          FINAL_PROJ_ID="prj_0k1EllNoJNBOYzzBdCSeKmcAEmaG"
+          echo "Target PROJECT_ID: $FINAL_PROJ_ID"
+
           echo "== Token owner =="
           curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v2/user" \
             | jq -r '"  username=" + .user.username + " | email=" + .user.email'
           echo
 
-          # Daftar nama project yang dicari (project Vercel pernah ganti nama)
-          # Urutan = prioritas. Kalau ada beberapa yang match, ambil yang pertama.
-          PROJECT_CANDIDATES="erp erp-app erp-altro-service"
-
-          echo "== Cari project di personal scope (kandidat: $PROJECT_CANDIDATES) =="
-          curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
-            "https://api.vercel.com/v9/projects?limit=50" > /tmp/projs_personal.json
-          echo "Personal scope: $(jq -r '.projects[]? | "  - \(.name) [\(.id)]"' < /tmp/projs_personal.json | head -20)"
-
-          PERSONAL_PROJ_ID=""
-          PERSONAL_PROJ_NAME=""
-          for cand in $PROJECT_CANDIDATES; do
-            pid=$(jq -r --arg n "$cand" '.projects[]? | select(.name==$n) | .id' < /tmp/projs_personal.json | head -1)
-            if [ -n "$pid" ]; then
-              PERSONAL_PROJ_ID=$pid
-              PERSONAL_PROJ_NAME=$cand
-              echo "→ Ketemu '$cand' di personal: $pid"
-              break
-            fi
-          done
-          [ -z "$PERSONAL_PROJ_ID" ] && echo "→ Tidak ada kandidat yang match di personal scope"
-          echo
-
-          echo "== List teams (cari project di tiap team) =="
-          curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
-            "https://api.vercel.com/v2/teams" > /tmp/teams.json
-          jq -r '.teams[]? | "  - \(.name) | id=\(.id) | slug=\(.slug)"' < /tmp/teams.json
-
-          TEAM_PROJ_ID=""
-          TEAM_PROJ_NAME=""
-          FOUND_TEAM_ID=""
-          for tid in $(jq -r '.teams[]? | .id' < /tmp/teams.json); do
-            curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
-              "https://api.vercel.com/v9/projects?teamId=$tid&limit=50" > /tmp/projs_team.json
-            for cand in $PROJECT_CANDIDATES; do
-              pid=$(jq -r --arg n "$cand" '.projects[]? | select(.name==$n) | .id' < /tmp/projs_team.json | head -1)
-              if [ -n "$pid" ]; then
-                echo "→ Ketemu '$cand' di team $tid: $pid"
-                TEAM_PROJ_ID=$pid
-                TEAM_PROJ_NAME=$cand
-                FOUND_TEAM_ID=$tid
-                break 2
-              fi
-            done
-          done
-
-          # Pilih: utamakan team scope kalau ada, fallback ke personal
-          if [ -n "$TEAM_PROJ_ID" ]; then
-            FINAL_PROJ_ID=$TEAM_PROJ_ID
-            FINAL_PROJ_NAME=$TEAM_PROJ_NAME
-            FINAL_ORG_ID=$FOUND_TEAM_ID
-            echo "✓ Pakai project '$FINAL_PROJ_NAME' di team: PROJECT_ID=$FINAL_PROJ_ID ORG_ID=$FINAL_ORG_ID"
-          elif [ -n "$PERSONAL_PROJ_ID" ]; then
-            FINAL_PROJ_ID=$PERSONAL_PROJ_ID
-            FINAL_PROJ_NAME=$PERSONAL_PROJ_NAME
-            # Personal scope: accountId user
+          # Cek di personal scope
+          echo "== Cek project di personal scope =="
+          status=$(curl -sS -o /tmp/proj.json -w "%{http_code}" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v9/projects/$FINAL_PROJ_ID")
+          if [ "$status" = "200" ]; then
             FINAL_ORG_ID=$(curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
               "https://api.vercel.com/v2/user" | jq -r '.user.id')
-            echo "✓ Pakai project '$FINAL_PROJ_NAME' di personal scope: PROJECT_ID=$FINAL_PROJ_ID ORG_ID=$FINAL_ORG_ID"
+            echo "✓ Project ditemukan di personal scope. ORG_ID (user)=$FINAL_ORG_ID"
           else
-            echo "::error::Tidak ada kandidat project ($PROJECT_CANDIDATES) yang ditemukan di personal scope maupun teams. Periksa: (1) nama project di Vercel — tambahkan ke PROJECT_CANDIDATES kalau berbeda; (2) VERCEL_TOKEN punya akses ke account/team yang benar."
-            exit 1
+            echo "→ Tidak ada di personal scope (http $status). Cari di teams…"
+            curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v2/teams" > /tmp/teams.json
+            jq -r '.teams[]? | "  - \(.name) | id=\(.id) | slug=\(.slug)"' < /tmp/teams.json
+
+            FINAL_ORG_ID=""
+            for tid in $(jq -r '.teams[]? | .id' < /tmp/teams.json); do
+              status=$(curl -sS -o /tmp/proj.json -w "%{http_code}" \
+                -H "Authorization: Bearer $VERCEL_TOKEN" \
+                "https://api.vercel.com/v9/projects/$FINAL_PROJ_ID?teamId=$tid")
+              if [ "$status" = "200" ]; then
+                FINAL_ORG_ID=$tid
+                echo "✓ Project ditemukan di team $tid"
+                break
+              fi
+            done
+
+            if [ -z "$FINAL_ORG_ID" ]; then
+              echo "::error::PROJECT_ID $FINAL_PROJ_ID tidak ditemukan di personal scope maupun team manapun yang bisa diakses VERCEL_TOKEN. Cek (1) token punya scope ke owner project; (2) PROJECT_ID benar."
+              exit 1
+            fi
           fi
 
           echo "PROJECT_ID=$FINAL_PROJ_ID" >> "$GITHUB_OUTPUT"
