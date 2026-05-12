@@ -775,9 +775,12 @@ export default function Finance() {
           </>
         )}
 
-        {/* Tab Content: Laporan & Grafik */}
+        {/* Tab Content: Laporan & Grafik
+            Pakai block layout + space-y-4, BUKAN flex-col. Flex children Section
+            (yang ber-overflow-hidden) bisa di-shrink algorithma flex sampai body
+            ter-clip di Chromium tertentu — ini bug yg pernah muncul. */}
         {activeTab === 'report' && (
-          <div className="flex-1 overflow-auto flex flex-col gap-4 px-1 pb-2">
+          <div className="flex-1 overflow-auto px-1 pb-2 space-y-4">
 
             {/* ─── PERIOD SELECTOR — preset chips + dropdown + cetak laporan ─── */}
             <Section
@@ -791,9 +794,8 @@ export default function Finance() {
               }
               bodyClassName="p-4"
             >
-              <div className="flex flex-wrap items-center gap-3 justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-3">
-                  {/* Preset chips */}
                   <div className="flex flex-wrap gap-1.5">
                     <button
                       type="button"
@@ -815,9 +817,9 @@ export default function Finance() {
                       Bulan Lalu
                     </button>
                   </div>
-                  <div className="h-6 w-px bg-slate-200" aria-hidden="true" />
+                  <div className="hidden sm:block h-6 w-px bg-slate-200" aria-hidden="true" />
                   <div className="flex items-center gap-2">
-                    <label htmlFor="report-period" className="text-xs font-medium text-slate-500">Pilih bulan:</label>
+                    <label htmlFor="report-period" className="text-xs font-medium text-slate-500 whitespace-nowrap">Pilih bulan:</label>
                     <select
                       id="report-period"
                       value={reportPeriod}
@@ -831,45 +833,47 @@ export default function Finance() {
                     </select>
                   </div>
                 </div>
-                {/* Cetak Laporan — pindah ke sini dari header, kontekstual dengan periode dipilih */}
-                <ActionMenu
-                  ariaLabel="Pilih laporan untuk dicetak"
-                  trigger={
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap shadow-sm">
-                      <Printer className="w-4 h-4" /> Cetak Laporan
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    </span>
-                  }
-                  actions={[
-                    {
-                      label: `Ringkasan Bulanan — ${fmtBulanTahun(reportPeriod)}`,
-                      icon: FileText,
-                      onClick: () => window.open(`/print/laporan-keuangan?period=${reportPeriod}`, '_blank'),
-                    },
-                    {
-                      label: `Laporan Laba Rugi — ${fmtBulanTahun(reportPeriod)}`,
-                      icon: BarChart2,
-                      separator: true,
-                      onClick: () => window.open(`/print/laba-rugi?period=${reportPeriod}`, '_blank'),
-                    },
-                    {
-                      label: `Laporan Laba Rugi — Tahun ${reportPeriod.slice(0, 4)}`,
-                      icon: BarChart2,
-                      onClick: () => window.open(`/print/laba-rugi?period=${reportPeriod.slice(0, 4)}`, '_blank'),
-                    },
-                    {
-                      label: `Neraca per Akhir ${fmtBulanTahun(reportPeriod)}`,
-                      icon: Wallet,
-                      separator: true,
-                      onClick: () => window.open(`/print/neraca?period=${reportPeriod}`, '_blank'),
-                    },
-                    {
-                      label: `Neraca per Akhir Tahun ${reportPeriod.slice(0, 4)}`,
-                      icon: Wallet,
-                      onClick: () => window.open(`/print/neraca?period=${reportPeriod.slice(0, 4)}`, '_blank'),
-                    },
-                  ]}
-                />
+                {/* Cetak Laporan — kontekstual dgn periode dipilih */}
+                <div className="shrink-0">
+                  <ActionMenu
+                    ariaLabel="Pilih laporan untuk dicetak"
+                    trigger={
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap shadow-sm">
+                        <Printer className="w-4 h-4" /> Cetak Laporan
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </span>
+                    }
+                    actions={[
+                      {
+                        label: `Ringkasan Bulanan — ${fmtBulanTahun(reportPeriod)}`,
+                        icon: FileText,
+                        onClick: () => window.open(`/print/laporan-keuangan?period=${reportPeriod}`, '_blank'),
+                      },
+                      {
+                        label: `Laporan Laba Rugi — ${fmtBulanTahun(reportPeriod)}`,
+                        icon: BarChart2,
+                        separator: true,
+                        onClick: () => window.open(`/print/laba-rugi?period=${reportPeriod}`, '_blank'),
+                      },
+                      {
+                        label: `Laporan Laba Rugi — Tahun ${reportPeriod.slice(0, 4)}`,
+                        icon: BarChart2,
+                        onClick: () => window.open(`/print/laba-rugi?period=${reportPeriod.slice(0, 4)}`, '_blank'),
+                      },
+                      {
+                        label: `Neraca per Akhir ${fmtBulanTahun(reportPeriod)}`,
+                        icon: Wallet,
+                        separator: true,
+                        onClick: () => window.open(`/print/neraca?period=${reportPeriod}`, '_blank'),
+                      },
+                      {
+                        label: `Neraca per Akhir Tahun ${reportPeriod.slice(0, 4)}`,
+                        icon: Wallet,
+                        onClick: () => window.open(`/print/neraca?period=${reportPeriod.slice(0, 4)}`, '_blank'),
+                      },
+                    ]}
+                  />
+                </div>
               </div>
             </Section>
 
