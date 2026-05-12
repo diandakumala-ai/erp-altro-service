@@ -88,7 +88,7 @@ export default function PrintTemplates() {
           @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
             html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
-            @page { size: A4 portrait; margin: 12mm; }
+            @page { size: A4 portrait; margin: 0; }
             .no-print { display: none !important; }
             .page-break { page-break-before: always; }
             table { page-break-inside: auto; }
@@ -112,7 +112,7 @@ export default function PrintTemplates() {
           </div>
         </div>
 
-        <div className="bg-white mx-auto my-8 px-12 py-10 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:w-auto print:min-h-0 w-[210mm] min-h-[297mm] font-sans">
+        <div className="bg-white mx-auto my-8 px-12 py-10 shadow-2xl print:shadow-none print:my-0 print:p-[12mm] print:w-auto print:min-h-0 w-[210mm] min-h-[297mm] font-sans">
           <div className="flex justify-between items-center border-b-2 border-slate-800 pb-5 mb-6">
             <div className="flex items-center gap-4">
               <img src={bs.logoUrl || '/primary-logo.png'} alt="Logo" className="w-14 h-14 object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
@@ -338,7 +338,7 @@ export default function PrintTemplates() {
           @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
             html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
-            @page { size: A4 portrait; margin: 10mm; }
+            @page { size: A4 portrait; margin: 0; }
             .no-print { display: none !important; }
             .half-a4-page {
               /* Target ½ A4 atas; konten yg lebih panjang akan flow ke bawah, tidak terpotong */
@@ -370,7 +370,7 @@ export default function PrintTemplates() {
         </div>
 
         {/* Halaman ½ A4 (atas) — preview tampak seperti kertas carbon copy */}
-        <div className="half-a4-page bg-white text-black px-7 py-5 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none print:min-h-0 print:w-full text-sm">
+        <div className="half-a4-page bg-white text-black px-7 py-5 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:p-[10mm] print:max-w-none print:min-h-0 print:w-full text-sm">
 
           {/* Header */}
           <div className="flex justify-between items-start mb-4 border-b-2 border-black pb-3">
@@ -531,7 +531,7 @@ export default function PrintTemplates() {
           @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
             html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
-            @page { size: A4 portrait; margin: 10mm; }
+            @page { size: A4 portrait; margin: 0; }
             .no-print { display: none !important; }
             .half-a4-page {
               /* Target ½ A4 atas; konten yg lebih panjang akan flow ke bawah, tidak terpotong */
@@ -584,7 +584,7 @@ export default function PrintTemplates() {
         </div>
 
         {/* Halaman ½ A4 (atas) — preview tampak seperti kertas carbon copy */}
-        <div className="half-a4-page relative bg-white text-black px-7 py-5 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none print:min-h-0 print:w-full text-xs">
+        <div className="half-a4-page relative bg-white text-black px-7 py-5 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:p-[10mm] print:max-w-none print:min-h-0 print:w-full text-xs">
 
           {/* Watermark OVERDUE — hanya muncul kalau piutang lewat tempo */}
           {piutang.isOverdue && (
@@ -827,7 +827,7 @@ export default function PrintTemplates() {
           @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
             html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
-            @page { size: A4 portrait; margin: 12mm; }
+            @page { size: A4 portrait; margin: 0; }
             .no-print { display: none !important; }
             .spk-page {
               /* Tidak dipotong; bila konten panjang akan flow ke halaman berikut */
@@ -859,7 +859,7 @@ export default function PrintTemplates() {
         </div>
 
         {/* Konten A4 */}
-        <div className="spk-page bg-white text-black px-10 py-7 font-sans max-w-[210mm] mx-auto my-8 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none print:w-full text-sm">
+        <div className="spk-page bg-white text-black px-10 py-7 font-sans max-w-[210mm] mx-auto my-8 shadow-2xl print:shadow-none print:my-0 print:p-[12mm] print:max-w-none print:w-full text-sm">
 
           {/* Header */}
           <div className="flex items-center justify-center gap-4 border-b-2 border-black pb-3 mb-4">
@@ -961,7 +961,7 @@ export default function PrintTemplates() {
           @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
             html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
-            @page { size: A4 portrait; margin: 10mm; }
+            @page { size: A4 portrait; margin: 0; }
             .no-print { display: none !important; }
             .half-a4-page {
               /* Target ½ A4 atas; konten yg lebih panjang akan flow ke bawah, tidak terpotong */
@@ -994,7 +994,7 @@ export default function PrintTemplates() {
         </div>
 
         {/* Halaman ½ A4 (atas) — preview tampak seperti kertas carbon copy */}
-        <div className="half-a4-page bg-white text-black px-7 py-4 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:max-w-none print:min-h-0 print:w-full text-xs">
+        <div className="half-a4-page bg-white text-black px-7 py-4 font-sans max-w-[210mm] mx-auto min-h-[148mm] my-6 shadow-2xl print:shadow-none print:my-0 print:p-[10mm] print:max-w-none print:min-h-0 print:w-full text-xs">
 
           {/* Header */}
           <div className="flex justify-between items-start mb-4 border-b-2 border-black pb-3">
@@ -1114,7 +1114,7 @@ export default function PrintTemplates() {
           @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
-            @page { size: A4 portrait; margin: 10mm; }
+            @page { size: A4 portrait; margin: 0; }
             .no-print { display: none !important; }
             .print-page {
               page-break-inside: avoid;
@@ -1140,7 +1140,7 @@ export default function PrintTemplates() {
         </div>
 
         {/* Konten A4 — tidak dibatasi tinggi agar tidak terpotong */}
-        <div className="print-page bg-white text-black px-8 py-5 font-sans max-w-[210mm] mx-auto my-6 shadow-2xl print:my-0 print:px-0 print:py-0 print:max-w-none print:w-full text-sm">
+        <div className="print-page bg-white text-black px-8 py-5 font-sans max-w-[210mm] mx-auto my-6 shadow-2xl print:my-0 print:p-[10mm] print:max-w-none print:w-full text-sm">
 
           {/* Header */}
           <div className="flex justify-between items-start mb-4 border-b-2 border-black pb-3">
@@ -1305,7 +1305,7 @@ export default function PrintTemplates() {
           @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
             html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
-            @page { size: A4 portrait; margin: 12mm; }
+            @page { size: A4 portrait; margin: 0; }
             .no-print { display: none !important; }
             table { page-break-inside: auto; }
             tr { page-break-inside: avoid; }
@@ -1325,7 +1325,7 @@ export default function PrintTemplates() {
           </div>
         </div>
 
-        <div className="bg-white mx-auto my-8 px-12 py-10 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:w-auto print:min-h-0 w-[210mm] min-h-[297mm] font-sans">
+        <div className="bg-white mx-auto my-8 px-12 py-10 shadow-2xl print:shadow-none print:my-0 print:p-[12mm] print:w-auto print:min-h-0 w-[210mm] min-h-[297mm] font-sans">
           {/* Header */}
           <div className="text-center border-b-2 border-slate-800 pb-4 mb-6">
             <h1 className="text-xl font-black text-slate-900 leading-tight uppercase">{bs.namaBengkel}</h1>
@@ -1454,7 +1454,7 @@ export default function PrintTemplates() {
           @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
             html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
-            @page { size: A4 portrait; margin: 12mm; }
+            @page { size: A4 portrait; margin: 0; }
             .no-print { display: none !important; }
             table { page-break-inside: auto; }
             tr { page-break-inside: avoid; }
@@ -1473,7 +1473,7 @@ export default function PrintTemplates() {
           </div>
         </div>
 
-        <div className="bg-white mx-auto my-8 px-12 py-10 shadow-2xl print:shadow-none print:my-0 print:px-0 print:py-0 print:w-auto print:min-h-0 w-[210mm] min-h-[297mm] font-sans">
+        <div className="bg-white mx-auto my-8 px-12 py-10 shadow-2xl print:shadow-none print:my-0 print:p-[12mm] print:w-auto print:min-h-0 w-[210mm] min-h-[297mm] font-sans">
           {/* Header */}
           <div className="text-center border-b-2 border-slate-800 pb-4 mb-6">
             <h1 className="text-xl font-black text-slate-900 leading-tight uppercase">{bs.namaBengkel}</h1>
