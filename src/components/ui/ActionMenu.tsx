@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, type ReactNode } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { MoreHorizontal } from 'lucide-react';
 
 export interface MenuAction {
@@ -23,17 +24,49 @@ interface ActionMenuProps {
 
 /**
  * Dropdown menu aksi — accessible alternative untuk `<select>` aksi.
- * Sebelumnya WO pakai <select> dengan emoji 📝🖨️🗑️ — tidak konsisten OS,
- * dan mencampur action destruktif (Hapus) dengan non-destruktif (Cetak).
+ *
+ * - Default trigger (no `trigger` prop): icon-only button 44×44 / 32×32.
+ * - Custom trigger: button auto-size, hanya bawa focus-ring; styling penuh
+ *   diserahkan ke caller via element yg di-pass.
+ * - Dropdown panel: di-render via React portal supaya tidak ter-clip oleh
+ *   ancestor yg pakai `overflow-hidden` (mis. komponen Section). Posisi
+ *   dihitung via getBoundingClientRect() dan re-track scroll/resize.
  */
 export function ActionMenu({ actions, trigger, ariaLabel = 'Buka menu aksi', align = 'right' }: ActionMenuProps) {
   const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; right: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const hasCustomTrigger = !!trigger;
+
+  // Track posisi trigger untuk re-position menu yg di-portal-kan
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const update = () => {
+      const rect = triggerRef.current!.getBoundingClientRect();
+      setMenuPos({
+        top: rect.bottom + 4, // mt-1 ≈ 4px
+        left: rect.left,
+        right: window.innerWidth - rect.right,
+      });
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (containerRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
     };
     const keyHandler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
@@ -46,24 +79,34 @@ export function ActionMenu({ actions, trigger, ariaLabel = 'Buka menu aksi', ali
     };
   }, [open]);
 
+  const triggerClass = hasCustomTrigger
+    ? 'inline-flex items-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300'
+    : 'inline-flex items-center justify-center w-11 h-11 sm:w-8 sm:h-8 rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 transition-colors';
+
   return (
     <div ref={containerRef} className="relative inline-block">
       <button
+        ref={triggerRef}
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={ariaLabel}
         title={ariaLabel}
         onClick={() => setOpen(v => !v)}
-        className="inline-flex items-center justify-center w-11 h-11 sm:w-8 sm:h-8 rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 transition-colors"
+        className={triggerClass}
       >
         {trigger ?? <MoreHorizontal className="w-4 h-4" aria-hidden="true" />}
       </button>
-      {open && (
+      {open && menuPos && createPortal(
         <div
+          ref={menuRef}
           role="menu"
-          className={`absolute mt-1 ${align === 'right' ? 'right-0' : 'left-0'} min-w-[180px] bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden`}
-          style={{ zIndex: 'var(--z-dropdown)' }}
+          className="fixed min-w-[200px] bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
+          style={{
+            zIndex: 'var(--z-dropdown)',
+            top: menuPos.top,
+            ...(align === 'right' ? { right: menuPos.right } : { left: menuPos.left }),
+          }}
         >
           {actions.map((a, i) => {
             const Icon = a.icon;
@@ -81,12 +124,13 @@ export function ActionMenu({ actions, trigger, ariaLabel = 'Buka menu aksi', ali
                   }`}
                 >
                   {Icon && <Icon className={`w-4 h-4 shrink-0 ${a.destructive ? 'text-red-500' : 'text-slate-400'}`} aria-hidden="true" />}
-                  <span>{a.label}</span>
+                  <span className="truncate">{a.label}</span>
                 </button>
               </div>
             );
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
