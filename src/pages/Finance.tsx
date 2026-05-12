@@ -552,47 +552,6 @@ export default function Finance() {
               <FileSpreadsheet className="w-4 h-4" /> <span className="hidden sm:inline">Export Excel</span>
             </Button>
           )}
-          {/* Cetak Laporan — hanya di tab Laporan Laba Rugi (kontekstual) */}
-          {activeTab === 'report' && (
-            <ActionMenu
-              ariaLabel="Pilih laporan untuk dicetak"
-              trigger={
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap">
-                  <Printer className="w-4 h-4" /> <span className="hidden sm:inline">Cetak Laporan</span>
-                  <ChevronDown className="w-3.5 h-3.5" />
-                </span>
-              }
-              actions={[
-                {
-                  label: `Ringkasan Bulanan — ${fmtBulanTahun(reportPeriod)}`,
-                  icon: FileText,
-                  onClick: () => window.open(`/print/laporan-keuangan?period=${reportPeriod}`, '_blank'),
-                },
-                {
-                  label: `Laporan Laba Rugi — ${fmtBulanTahun(reportPeriod)}`,
-                  icon: BarChart2,
-                  separator: true,
-                  onClick: () => window.open(`/print/laba-rugi?period=${reportPeriod}`, '_blank'),
-                },
-                {
-                  label: `Laporan Laba Rugi — Tahun ${reportPeriod.slice(0, 4)}`,
-                  icon: BarChart2,
-                  onClick: () => window.open(`/print/laba-rugi?period=${reportPeriod.slice(0, 4)}`, '_blank'),
-                },
-                {
-                  label: `Neraca per Akhir ${fmtBulanTahun(reportPeriod)}`,
-                  icon: Wallet,
-                  separator: true,
-                  onClick: () => window.open(`/print/neraca?period=${reportPeriod}`, '_blank'),
-                },
-                {
-                  label: `Neraca per Akhir Tahun ${reportPeriod.slice(0, 4)}`,
-                  icon: Wallet,
-                  onClick: () => window.open(`/print/neraca?period=${reportPeriod.slice(0, 4)}`, '_blank'),
-                },
-              ]}
-            />
-          )}
           {activeTab === 'table' && (
             <Button variant="primary" onClick={handleAdd} title="Catat Transaksi">
               <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Catat Transaksi</span>
@@ -818,9 +777,9 @@ export default function Finance() {
 
         {/* Tab Content: Laporan & Grafik */}
         {activeTab === 'report' && (
-          <div className="flex-1 overflow-auto flex flex-col gap-4 p-1">
+          <div className="flex-1 overflow-auto flex flex-col gap-4 px-1 pb-2">
 
-            {/* ─── PERIOD SELECTOR — preset chips + dropdown ──────────────── */}
+            {/* ─── PERIOD SELECTOR — preset chips + dropdown + cetak laporan ─── */}
             <Section
               title="Periode Laporan"
               icon={CalendarRange}
@@ -832,44 +791,85 @@ export default function Finance() {
               }
               bodyClassName="p-4"
             >
-              <div className="flex flex-wrap items-center gap-3">
-                {/* Preset chips */}
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    onClick={setPeriodBulanIni}
-                    aria-pressed={reportPeriod === thisMonthStr}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 ${
-                      reportPeriod === thisMonthStr
-                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
-                        : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-700'
-                    }`}
-                  >
-                    Bulan Ini
-                  </button>
-                  <button
-                    type="button"
-                    onClick={setPeriodBulanLalu}
-                    className="px-3 py-1.5 text-xs font-semibold rounded-lg border-2 bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-700 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
-                  >
-                    Bulan Lalu
-                  </button>
+              <div className="flex flex-wrap items-center gap-3 justify-between">
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Preset chips */}
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={setPeriodBulanIni}
+                      aria-pressed={reportPeriod === thisMonthStr}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 ${
+                        reportPeriod === thisMonthStr
+                          ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                          : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-700'
+                      }`}
+                    >
+                      Bulan Ini
+                    </button>
+                    <button
+                      type="button"
+                      onClick={setPeriodBulanLalu}
+                      className="px-3 py-1.5 text-xs font-semibold rounded-lg border-2 bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-700 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
+                    >
+                      Bulan Lalu
+                    </button>
+                  </div>
+                  <div className="h-6 w-px bg-slate-200" aria-hidden="true" />
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="report-period" className="text-xs font-medium text-slate-500">Pilih bulan:</label>
+                    <select
+                      id="report-period"
+                      value={reportPeriod}
+                      onChange={e => setReportPeriod(e.target.value)}
+                      className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 font-medium text-slate-700 cursor-pointer"
+                      aria-label="Pilih periode laporan"
+                    >
+                      {availableMonths.map(m => (
+                        <option key={m} value={m}>{fmtBulanTahun(m)}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-                <div className="h-6 w-px bg-slate-200" aria-hidden="true" />
-                <div className="flex items-center gap-2">
-                  <label htmlFor="report-period" className="text-xs font-medium text-slate-500">Pilih bulan:</label>
-                  <select
-                    id="report-period"
-                    value={reportPeriod}
-                    onChange={e => setReportPeriod(e.target.value)}
-                    className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 font-medium text-slate-700 cursor-pointer"
-                    aria-label="Pilih periode laporan"
-                  >
-                    {availableMonths.map(m => (
-                      <option key={m} value={m}>{fmtBulanTahun(m)}</option>
-                    ))}
-                  </select>
-                </div>
+                {/* Cetak Laporan — pindah ke sini dari header, kontekstual dengan periode dipilih */}
+                <ActionMenu
+                  ariaLabel="Pilih laporan untuk dicetak"
+                  trigger={
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap shadow-sm">
+                      <Printer className="w-4 h-4" /> Cetak Laporan
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </span>
+                  }
+                  actions={[
+                    {
+                      label: `Ringkasan Bulanan — ${fmtBulanTahun(reportPeriod)}`,
+                      icon: FileText,
+                      onClick: () => window.open(`/print/laporan-keuangan?period=${reportPeriod}`, '_blank'),
+                    },
+                    {
+                      label: `Laporan Laba Rugi — ${fmtBulanTahun(reportPeriod)}`,
+                      icon: BarChart2,
+                      separator: true,
+                      onClick: () => window.open(`/print/laba-rugi?period=${reportPeriod}`, '_blank'),
+                    },
+                    {
+                      label: `Laporan Laba Rugi — Tahun ${reportPeriod.slice(0, 4)}`,
+                      icon: BarChart2,
+                      onClick: () => window.open(`/print/laba-rugi?period=${reportPeriod.slice(0, 4)}`, '_blank'),
+                    },
+                    {
+                      label: `Neraca per Akhir ${fmtBulanTahun(reportPeriod)}`,
+                      icon: Wallet,
+                      separator: true,
+                      onClick: () => window.open(`/print/neraca?period=${reportPeriod}`, '_blank'),
+                    },
+                    {
+                      label: `Neraca per Akhir Tahun ${reportPeriod.slice(0, 4)}`,
+                      icon: Wallet,
+                      onClick: () => window.open(`/print/neraca?period=${reportPeriod.slice(0, 4)}`, '_blank'),
+                    },
+                  ]}
+                />
               </div>
             </Section>
 

@@ -40,14 +40,14 @@ export function Section({ title, icon: Icon, rightSlot, children, className = ''
   const a = ACCENT[accent];
   return (
     <div className={`bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden ${className}`}>
-      <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+      <div className="px-6 py-4 border-b border-slate-100 flex flex-wrap items-center gap-x-2 gap-y-1.5">
         {Icon && (
-          <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${a.bg}`}>
+          <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${a.bg}`}>
             <Icon className={`w-4 h-4 ${a.fg}`} />
           </div>
         )}
-        <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
-        {rightSlot && <div className="ml-auto">{rightSlot}</div>}
+        <h3 className="text-sm font-semibold text-slate-800 min-w-0 truncate">{title}</h3>
+        {rightSlot && <div className="ml-auto min-w-0">{rightSlot}</div>}
       </div>
       <div className={bodyClassName}>{children}</div>
     </div>
