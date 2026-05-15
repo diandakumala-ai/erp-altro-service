@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Save, Building2, User, Phone, Mail, MapPin, FileText, Eye, EyeOff, Upload, Trash2, Lock, Loader2, ShieldCheck, CalendarClock, Calculator, Plus, Wallet, Landmark } from 'lucide-react';
-import { useStore, type BengkelSettings, type AsetTetap, type UtangManual, type JenisUsahaPajak } from '../store/useStore';
+import { useStore, type BengkelSettings, type AsetTetap, type UtangManual, type JenisUsahaPajak, akumulasiDepresiasiSampai } from '../store/useStore';
 import { toast } from '../lib/toast';
 import { supabase } from '../lib/supabase';
 import { Button, Section as UISection, TerminSelector } from '../components/ui';
@@ -272,24 +272,38 @@ function PasswordChangePanel() {
 function AsetTetapEditor({
   items, onChange,
 }: { items: AsetTetap[]; onChange: (items: AsetTetap[]) => void }) {
+  const todayIso = new Date().toISOString().slice(0, 10);
   const add = () => onChange([
     ...items,
-    { id: uid(), nama: 'Aset Baru', kategori: 'Peralatan', hargaPerolehan: 0, akumulasiPenyusutan: 0 },
+    {
+      id: uid(),
+      nama: 'Aset Baru',
+      kategori: 'Peralatan',
+      hargaPerolehan: 0,
+      akumulasiPenyusutan: 0,
+      tanggalPerolehan: todayIso,
+      umurEkonomis: 4,
+      nilaiResidu: 0,
+    },
   ]);
   const update = (id: string, patch: Partial<AsetTetap>) =>
     onChange(items.map(it => it.id === id ? { ...it, ...patch } : it));
   const remove = (id: string) => onChange(items.filter(it => it.id !== id));
 
   const total = items.reduce((s, a) => s + a.hargaPerolehan, 0);
-  const totalPenyusutan = items.reduce((s, a) => s + a.akumulasiPenyusutan, 0);
-  const nilaiBuku = total - totalPenyusutan;
+  // Akumulasi penyusutan total: auto-compute s/d hari ini bila aset punya umurEkonomis,
+  // fallback ke field manual untuk aset legacy.
+  const totalPenyusutan = items.reduce((s, a) => s + akumulasiDepresiasiSampai(a, todayIso), 0);
+  const nilaiBuku = Math.max(total - totalPenyusutan, 0);
 
   return (
     <div className="bg-white border border-slate-200 rounded-lg p-4">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-3">
         <div>
           <h4 className="font-semibold text-slate-700 text-sm">Aset Tetap</h4>
-          <p className="text-tiny text-slate-400">Peralatan, kendaraan, bangunan — yang punya umur ekonomis &gt; 1 tahun.</p>
+          <p className="text-tiny text-slate-400">
+            Peralatan, kendaraan, bangunan — punya umur ekonomis &gt; 1 tahun. Penyusutan otomatis (garis lurus, PSAK 16).
+          </p>
         </div>
         <Button variant="soft-emerald" onClick={add}><Plus className="w-4 h-4" /> Tambah Aset</Button>
       </div>
@@ -297,73 +311,110 @@ function AsetTetapEditor({
       {items.length === 0 ? (
         <p className="text-xs text-slate-400 italic text-center py-4">Belum ada aset tetap.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="px-2 py-1.5 text-left font-semibold text-slate-500 uppercase tracking-wider">Nama Aset</th>
-                <th className="px-2 py-1.5 text-left font-semibold text-slate-500 uppercase tracking-wider w-32">Kategori</th>
-                <th className="px-2 py-1.5 text-right font-semibold text-slate-500 uppercase tracking-wider w-36">Harga Perolehan</th>
-                <th className="px-2 py-1.5 text-right font-semibold text-slate-500 uppercase tracking-wider w-36">Akumulasi Penyusutan</th>
-                <th className="px-2 py-1.5 text-right font-semibold text-slate-500 uppercase tracking-wider w-32">Nilai Buku</th>
-                <th className="w-10"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map(a => (
-                <tr key={a.id} className="border-b border-slate-100">
-                  <td className="px-2 py-1">
-                    <input type="text" value={a.nama}
-                      onChange={e => update(a.id, { nama: e.target.value })}
-                      aria-label="Nama aset"
-                      className="w-full px-2 py-1 border border-slate-200 rounded text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300" />
-                  </td>
-                  <td className="px-2 py-1">
-                    <select value={a.kategori}
-                      onChange={e => update(a.id, { kategori: e.target.value as AsetTetap['kategori'] })}
-                      aria-label="Kategori aset"
-                      className="w-full px-2 py-1 border border-slate-200 rounded text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 bg-white">
-                      <option value="Tanah">Tanah</option>
-                      <option value="Bangunan">Bangunan</option>
-                      <option value="Kendaraan">Kendaraan</option>
-                      <option value="Peralatan">Peralatan</option>
-                      <option value="Lainnya">Lainnya</option>
-                    </select>
-                  </td>
-                  <td className="px-2 py-1">
+        <div className="space-y-3">
+          {items.map(a => {
+            const autoMode = (a.umurEkonomis ?? 0) > 0 && !!a.tanggalPerolehan && a.kategori !== 'Tanah';
+            const akumulasi = autoMode ? akumulasiDepresiasiSampai(a, todayIso) : a.akumulasiPenyusutan;
+            const nilaiBukuItem = Math.max(a.hargaPerolehan - akumulasi, 0);
+            return (
+              <div key={a.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
+                <div className="flex items-start gap-2 mb-2">
+                  <input type="text" value={a.nama}
+                    onChange={e => update(a.id, { nama: e.target.value })}
+                    aria-label="Nama aset"
+                    placeholder="Nama aset (mis. Mobil Pickup)"
+                    className="flex-1 px-2.5 py-1.5 border border-slate-200 rounded text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300" />
+                  <select value={a.kategori}
+                    onChange={e => update(a.id, { kategori: e.target.value as AsetTetap['kategori'] })}
+                    aria-label="Kategori aset"
+                    className="px-2 py-1.5 border border-slate-200 rounded text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 bg-white w-32">
+                    <option value="Tanah">Tanah</option>
+                    <option value="Bangunan">Bangunan</option>
+                    <option value="Kendaraan">Kendaraan</option>
+                    <option value="Peralatan">Peralatan</option>
+                    <option value="Lainnya">Lainnya</option>
+                  </select>
+                  <button onClick={() => remove(a.id)} title="Hapus aset" aria-label="Hapus aset"
+                    className="w-8 h-8 rounded bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center shrink-0">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-slate-500 font-medium">Harga Perolehan (Rp)</span>
                     <input type="number" min={0} value={a.hargaPerolehan}
                       onChange={e => update(a.id, { hargaPerolehan: Number(e.target.value) || 0 })}
-                      aria-label="Harga perolehan"
-                      className="w-full px-2 py-1 border border-slate-200 rounded text-sm text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300" />
-                  </td>
-                  <td className="px-2 py-1">
-                    <input type="number" min={0} value={a.akumulasiPenyusutan}
-                      onChange={e => update(a.id, { akumulasiPenyusutan: Number(e.target.value) || 0 })}
-                      aria-label="Akumulasi penyusutan"
-                      className="w-full px-2 py-1 border border-slate-200 rounded text-sm text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300" />
-                  </td>
-                  <td className="px-2 py-1 text-right tabular-nums text-slate-700 font-medium">
-                    Rp {fmtRp(Math.max(a.hargaPerolehan - a.akumulasiPenyusutan, 0))}
-                  </td>
-                  <td className="px-2 py-1 text-center">
-                    <button onClick={() => remove(a.id)} title="Hapus aset" aria-label="Hapus aset"
-                      className="w-7 h-7 rounded bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center mx-auto">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-emerald-300 bg-emerald-50">
-                <td colSpan={2} className="px-2 py-1.5 font-bold text-emerald-800 text-xs uppercase">Total</td>
-                <td className="px-2 py-1.5 text-right font-bold text-emerald-800 tabular-nums">Rp {fmtRp(total)}</td>
-                <td className="px-2 py-1.5 text-right font-bold text-red-700 tabular-nums">Rp {fmtRp(totalPenyusutan)}</td>
-                <td className="px-2 py-1.5 text-right font-black text-emerald-900 tabular-nums">Rp {fmtRp(nilaiBuku)}</td>
-                <td />
-              </tr>
-            </tfoot>
-          </table>
+                      className="px-2 py-1 border border-slate-200 rounded text-sm text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300" />
+                  </label>
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-slate-500 font-medium">Tanggal Perolehan</span>
+                    <input type="date" value={a.tanggalPerolehan ?? ''}
+                      onChange={e => update(a.id, { tanggalPerolehan: e.target.value || undefined })}
+                      className="px-2 py-1 border border-slate-200 rounded text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300" />
+                  </label>
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-slate-500 font-medium">Umur Ekonomis (tahun)</span>
+                    <input type="number" min={0} step={1} value={a.umurEkonomis ?? ''}
+                      placeholder={a.kategori === 'Tanah' ? 'N/A' : '4'}
+                      disabled={a.kategori === 'Tanah'}
+                      onChange={e => update(a.id, { umurEkonomis: Number(e.target.value) || undefined })}
+                      className="px-2 py-1 border border-slate-200 rounded text-sm text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:bg-slate-100 disabled:text-slate-400" />
+                  </label>
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-slate-500 font-medium">Nilai Residu (Rp)</span>
+                    <input type="number" min={0} value={a.nilaiResidu ?? 0}
+                      onChange={e => update(a.id, { nilaiResidu: Number(e.target.value) || 0 })}
+                      disabled={a.kategori === 'Tanah'}
+                      className="px-2 py-1 border border-slate-200 rounded text-sm text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:bg-slate-100 disabled:text-slate-400" />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2 pt-2 border-t border-slate-200 text-xs">
+                  <div className="text-slate-600">
+                    <span className="text-slate-400">Mode: </span>
+                    {a.kategori === 'Tanah' ? (
+                      <span className="text-slate-500 font-semibold">Tanah (tidak disusutkan)</span>
+                    ) : autoMode ? (
+                      <span className="text-emerald-700 font-semibold">Auto (PSAK 16)</span>
+                    ) : (
+                      <span className="text-amber-700 font-semibold">Manual (legacy)</span>
+                    )}
+                  </div>
+                  <div className="text-slate-600">
+                    <span className="text-slate-400">Akumulasi Penyusutan: </span>
+                    {autoMode ? (
+                      <span className="font-semibold text-slate-700">Rp {fmtRp(akumulasi)}</span>
+                    ) : (
+                      <input type="number" min={0} value={a.akumulasiPenyusutan}
+                        onChange={e => update(a.id, { akumulasiPenyusutan: Number(e.target.value) || 0 })}
+                        aria-label="Akumulasi penyusutan manual"
+                        className="ml-1 w-32 px-2 py-0.5 border border-slate-200 rounded text-sm text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300" />
+                    )}
+                  </div>
+                  <div className="text-slate-600">
+                    <span className="text-slate-400">Nilai Buku: </span>
+                    <span className="font-semibold text-emerald-700">Rp {fmtRp(nilaiBukuItem)}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          <div className="border-t-2 border-emerald-300 bg-emerald-50 rounded-lg p-3 grid grid-cols-3 gap-2 text-xs">
+            <div>
+              <span className="text-emerald-700 font-bold uppercase tracking-wider">Total Harga Perolehan</span>
+              <p className="font-bold text-emerald-800 tabular-nums">Rp {fmtRp(total)}</p>
+            </div>
+            <div>
+              <span className="text-red-700 font-bold uppercase tracking-wider">Total Akumulasi Penyusutan</span>
+              <p className="font-bold text-red-700 tabular-nums">Rp {fmtRp(totalPenyusutan)}</p>
+            </div>
+            <div>
+              <span className="text-emerald-900 font-bold uppercase tracking-wider">Total Nilai Buku</span>
+              <p className="font-black text-emerald-900 tabular-nums">Rp {fmtRp(nilaiBuku)}</p>
+            </div>
+          </div>
         </div>
       )}
     </div>
