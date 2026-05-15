@@ -1276,7 +1276,7 @@ export default function PrintTemplates() {
       ? periodeBulan(periodRaw)
       : periodeTahun(new Date().getFullYear());
 
-    const lr = computeLabaRugi(workOrders, finance, bs, periode);
+    const lr = computeLabaRugi(workOrders, finance, boms, bs, periode);
 
     const Row = ({
       label, value, indent = 0, bold = false, tone = 'slate', topBorder = false,
@@ -1425,7 +1425,7 @@ export default function PrintTemplates() {
       : periodeTahun(new Date().getFullYear());
 
     const inventory = useStore.getState().inventory;
-    const n = computeNeraca(workOrders, finance, inventory, bs, periode);
+    const n = computeNeraca(workOrders, finance, boms, inventory, bs, periode);
 
     const Row = ({
       label, value, indent = 0, bold = false, tone = 'slate', topBorder = false,

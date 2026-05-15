@@ -248,6 +248,7 @@ export default function Finance() {
   const [activeTab, setActiveTab] = useState<'table' | 'report' | 'piutang'>('table');
   const workOrders = useStore(s => s.workOrders);
   const inventory = useStore(s => s.inventory);
+  const boms = useStore(s => s.boms);
   const bengkelSettings = useStore(s => s.bengkelSettings);
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState<string | null>('tanggal');
@@ -472,12 +473,12 @@ export default function Finance() {
 
   // Estimasi pajak periode dipilih — pakai computeLabaRugi (proper UMKM/Badan)
   const labaRugiPeriode = useMemo(
-    () => computeLabaRugi(workOrders, finance, bengkelSettings, periodeBulan(reportPeriod)),
-    [workOrders, finance, bengkelSettings, reportPeriod]
+    () => computeLabaRugi(workOrders, finance, boms, bengkelSettings, periodeBulan(reportPeriod)),
+    [workOrders, finance, boms, bengkelSettings, reportPeriod]
   );
   const labaRugiTahun = useMemo(
-    () => computeLabaRugi(workOrders, finance, bengkelSettings, periodeTahun(Number(reportPeriod.slice(0, 4)))),
-    [workOrders, finance, bengkelSettings, reportPeriod]
+    () => computeLabaRugi(workOrders, finance, boms, bengkelSettings, periodeTahun(Number(reportPeriod.slice(0, 4)))),
+    [workOrders, finance, boms, bengkelSettings, reportPeriod]
   );
 
   // Utang PPN periode — Σ PPN keluaran WO usePpn yg dibuat di periode ini

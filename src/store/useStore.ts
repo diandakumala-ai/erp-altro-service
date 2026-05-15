@@ -181,20 +181,37 @@ export interface Periode {
   label: string;
 }
 
-/** Hasil perhitungan Laporan Laba Rugi (format PSAK). */
+/** Hasil perhitungan Laporan Laba Rugi (accrual basis, format SAK ETAP/PSAK).
+ *
+ * Pengakuan pendapatan: ACCRUAL — diakui saat WO Finished (tanggalInvoice ∈ periode),
+ * bukan saat uang masuk. Sesuai SAK ETAP & basis PP 55/2022 (peredaran bruto saat
+ * invoice terbit). Pendapatan lain-lain tetap cash basis (transaksi non-WO).
+ *
+ * Pengakuan HPP material: ACCRUAL — dari konsumsi BomItem WO yang tanggalInvoice
+ * ∈ periode. HPP gaji teknisi tetap cash basis (sistem tidak track jam kerja per WO).
+ */
 export interface LabaRugiData {
   periode: Periode;
   // Pendapatan
-  pendapatanJasa: number;        // Pendapatan dari servis/jasa
-  pendapatanLain: number;        // Pendapatan di luar usaha utama
+  pendapatanBrutoJasa: number;   // Σ (estimatedCost) WO finished di periode (sebelum diskon)
+  potonganPenjualan: number;     // Σ diskon WO finished di periode
+  pendapatanJasa: number;        // pendapatanBrutoJasa - potonganPenjualan (neto)
+  pendapatanLain: number;        // Pendapatan non-jasa (cash basis, dari finance)
   totalPendapatan: number;
   // Beban Pokok Pendapatan (HPP / COGS)
-  hppMaterial: number;           // Material/suku cadang yang dipakai
-  hppGajiProduksi: number;       // Gaji teknisi (jasa produksi)
+  hppMaterial: number;           // Σ BOM (jumlah × harga) untuk WO finished di periode
+  hppGajiProduksi: number;       // Gaji teknisi cash basis (Pengeluaran sub 'Gaji Teknisi')
   totalHpp: number;
   labaBruto: number;             // Pendapatan - HPP
   // Beban Usaha (Operating Expenses)
+  bebanPenyusutan: number;       // Σ penyusutan aset tetap untuk periode (auto-compute)
   bebanListrikOperasional: number;
+  bebanGajiKaryawan: number;     // Gaji non-produksi (admin/manajemen)
+  bebanSewa: number;
+  bebanIklanPromosi: number;
+  bebanTransport: number;
+  bebanTelekomunikasi: number;
+  bebanBpjsAsuransi: number;
   bebanLainLain: number;         // Pengeluaran sub-kategori "Lain-lain" + tanpa sub
   totalBebanUsaha: number;
   labaOperasional: number;       // Laba Bruto - Beban Usaha
@@ -204,7 +221,12 @@ export interface LabaRugiData {
   labaBersih: number;            // Laba Operasional - PPh
 }
 
-/** Hasil perhitungan Neraca (format PSAK). */
+/** Hasil perhitungan Neraca (format SAK ETAP/PSAK).
+ *
+ * Konsistensi accrual: piutang & utang PPN/PPh berbasis WO Finished (tanggalInvoice
+ * terbit), bukan cash flow. Akumulasi penyusutan auto-compute dari aset tetap dengan
+ * field PSAK 16 (tanggalPerolehan, umurEkonomis). Prive mengurangi ekuitas.
+ */
 export interface NeracaData {
   periode: Periode;
   // ASET LANCAR (Current Assets)
@@ -214,14 +236,14 @@ export interface NeracaData {
   totalAsetLancar: number;
   // ASET TETAP (Fixed Assets)
   asetTetapBruto: number;        // Σ hargaPerolehan
-  akumulasiPenyusutan: number;   // Σ akumulasi
+  akumulasiPenyusutan: number;   // Σ penyusutan tercatat sampai end-of-periode
   nilaiBukuAsetTetap: number;    // Bruto - Akumulasi
   detailAsetTetap: AsetTetap[];
   // TOTAL ASET
   totalAset: number;
   // KEWAJIBAN JANGKA PENDEK
-  utangPpn: number;              // Σ PPN keluaran dari WO usePpn (yg belum dibayar)
-  utangPph: number;              // PPh terutang dari Laba Rugi
+  utangPpn: number;              // (PPN keluaran WO finished − setoran PPN) ≥ 0
+  utangPph: number;              // PPh terutang akumulatif − setoran PPh
   utangJangkaPendekLain: UtangManual[];
   totalUtangJangkaPendekLain: number;
   totalKewajibanJangkaPendek: number;
@@ -232,15 +254,19 @@ export interface NeracaData {
   totalKewajiban: number;
   // EKUITAS
   modalDisetor: number;
-  labaDitahan: number;           // Laba periode sebelumnya (manual)
+  labaDitahan: number;           // Laba periode sebelumnya (manual setting)
+  prive: number;                 // Penarikan pemilik (Pengeluaran sub 'Prive', mengurangi ekuitas)
   labaTahunBerjalan: number;     // Dari Laba Rugi
   totalEkuitas: number;
   // TOTAL KEWAJIBAN + EKUITAS
   totalKewajibanEkuitas: number;
   /**
-   * Selisih = totalAset - totalKewajibanEkuitas.
-   * Bila > 0 berarti ada aset/transaksi yang belum ter-record di neraca
-   * (misal modal & saldo kas awal belum di-set di Settings).
+   * Selisih = totalAset - totalKewajibanEkuitas. Idealnya 0 bila semua transaksi
+   * tercatat & saldo awal benar. Sumber selisih umum:
+   *   1. Saldo Kas Awal / Modal Awal belum di-set di Settings
+   *   2. Aset Tetap tidak punya umurEkonomis (penyusutan tidak ke-compute)
+   *   3. WO finished sebelum periode buku tapi piutang/PPN masih outstanding
+   *   4. PPh tahun lalu belum disetor & belum tercatat di Laba Ditahan Awal
    */
   selisih: number;
 }
@@ -268,52 +294,172 @@ export function periodeTahun(year: number): Periode {
   };
 }
 
-/** Hitung Laporan Laba Rugi untuk periode tertentu. */
+/** Hitung beban penyusutan untuk satu aset untuk periode tertentu (garis lurus, PSAK 16).
+ *
+ * Returns 0 untuk: aset tanpa umurEkonomis, kategori 'Tanah', aset diperoleh setelah
+ * endDate, atau aset yang sudah habis disusutkan (akumulasi sebelum periode > basis).
+ *
+ * Penyusutan bulanan = (hargaPerolehan − nilaiResidu) / (umurEkonomis × 12)
+ * Penyusutan periode = bulanan × jumlah bulan aktif dalam periode (clamped ke umur).
+ */
+export function depresiasiPeriode(aset: AsetTetap, periode: Periode): number {
+  if (aset.kategori === 'Tanah') return 0;
+  if (!aset.umurEkonomis || aset.umurEkonomis <= 0) return 0;
+  if (!aset.tanggalPerolehan) return 0;
+  if (aset.tanggalPerolehan > periode.endDate) return 0;
+
+  const basis = Math.max(aset.hargaPerolehan - (aset.nilaiResidu ?? 0), 0);
+  if (basis <= 0) return 0;
+
+  const totalBulan = aset.umurEkonomis * 12;
+  const perBulan = basis / totalBulan;
+
+  // Bulan aktif: dari max(tanggalPerolehan, startDate) sampai min(akhirUmur, endDate)
+  const perolehan = new Date(aset.tanggalPerolehan);
+  const akhirUmur = new Date(perolehan);
+  akhirUmur.setMonth(akhirUmur.getMonth() + totalBulan);
+  const startD = new Date(periode.startDate);
+  const endD = new Date(periode.endDate);
+
+  const efektifStart = perolehan > startD ? perolehan : startD;
+  const efektifEnd = akhirUmur < endD ? akhirUmur : endD;
+  if (efektifStart > efektifEnd) return 0;
+
+  // Hitung bulan: (year diff)*12 + month diff, +1 inclusif
+  const bulanAktif = Math.max(0,
+    (efektifEnd.getFullYear() - efektifStart.getFullYear()) * 12 +
+    (efektifEnd.getMonth() - efektifStart.getMonth()) + 1
+  );
+  return Math.round(perBulan * bulanAktif);
+}
+
+/** Akumulasi penyusutan total satu aset dari tanggalPerolehan sampai endDate.
+ *  Untuk Neraca. Dipakai bila aset punya umurEkonomis (mode auto); fallback ke
+ *  field akumulasiPenyusutan manual bila tidak.
+ */
+export function akumulasiDepresiasiSampai(aset: AsetTetap, endDate: string): number {
+  if (aset.kategori === 'Tanah') return 0;
+  if (!aset.umurEkonomis || aset.umurEkonomis <= 0 || !aset.tanggalPerolehan) {
+    // Mode legacy: pakai snapshot manual
+    return aset.akumulasiPenyusutan;
+  }
+  if (aset.tanggalPerolehan > endDate) return 0;
+
+  const basis = Math.max(aset.hargaPerolehan - (aset.nilaiResidu ?? 0), 0);
+  const totalBulan = aset.umurEkonomis * 12;
+  const perBulan = basis / totalBulan;
+
+  const perolehan = new Date(aset.tanggalPerolehan);
+  const endD = new Date(endDate);
+  const akhirUmur = new Date(perolehan);
+  akhirUmur.setMonth(akhirUmur.getMonth() + totalBulan);
+
+  const cutoff = akhirUmur < endD ? akhirUmur : endD;
+  if (cutoff < perolehan) return 0;
+
+  const bulanLalu = Math.max(0,
+    (cutoff.getFullYear() - perolehan.getFullYear()) * 12 +
+    (cutoff.getMonth() - perolehan.getMonth()) + 1
+  );
+  return Math.min(Math.round(perBulan * bulanLalu), basis);
+}
+
+/** Filter WO yang pendapatannya diakui di periode (accrual basis).
+ *  Kriteria: punya tanggalInvoice (status sudah pernah Finished) DAN tanggalInvoice
+ *  ∈ periode. WO Queue/Proses tanpa invoice = work-in-progress, belum diakui.
+ */
+export function woRecognizedInPeriode(workOrders: WorkOrder[], periode: Periode): WorkOrder[] {
+  return workOrders.filter(wo =>
+    wo.tanggalInvoice &&
+    wo.tanggalInvoice >= periode.startDate &&
+    wo.tanggalInvoice <= periode.endDate &&
+    wo.estimatedCost > 0
+  );
+}
+
+/** Hitung Laporan Laba Rugi (accrual basis untuk pendapatan & HPP material). */
 export function computeLabaRugi(
   workOrders: WorkOrder[],
   finance: FinanceTransaction[],
+  boms: BomItem[],
   settings: BengkelSettings,
   periode: Periode,
 ): LabaRugiData {
   const inPeriode = (t: FinanceTransaction) =>
     t.tanggal >= periode.startDate && t.tanggal <= periode.endDate;
 
-  const sum = (filter: (t: FinanceTransaction) => boolean) =>
-    Math.abs(finance.filter(t => inPeriode(t) && filter(t)).reduce((s, t) => s + t.nominal, 0));
+  const sumPengeluaran = (subKategori: string | string[]) => {
+    const subs = Array.isArray(subKategori) ? subKategori : [subKategori];
+    return Math.abs(
+      finance
+        .filter(t => inPeriode(t) && t.kategori === 'Pengeluaran' && subs.includes(t.subKategori ?? ''))
+        .reduce((s, t) => s + t.nominal, 0)
+    );
+  };
 
-  // Pendapatan
-  const pendapatanJasa = sum(t =>
-    t.kategori === 'Pemasukan' &&
-    (t.subKategori === 'DP' || t.subKategori === 'Pelunasan' || t.subKategori === 'Pembayaran Servis'));
-  const pendapatanLain = sum(t => t.kategori === 'Pemasukan' && (t.subKategori === 'Lain-lain' || !t.subKategori));
+  // ── PENDAPATAN — Accrual basis dari WO finished di periode ────────────────
+  const woRecognized = woRecognizedInPeriode(workOrders, periode);
+  const pendapatanBrutoJasa = woRecognized.reduce((s, wo) => s + wo.estimatedCost, 0);
+  const potonganPenjualan = woRecognized.reduce((s, wo) => s + (wo.diskon ?? 0), 0);
+  const pendapatanJasa = Math.max(pendapatanBrutoJasa - potonganPenjualan, 0);
+
+  // Pendapatan lain-lain — tetap cash basis (transaksi non-WO via finance).
+  // PENTING: pembayaran customer (DP/Pelunasan/Pembayaran Servis) TIDAK masuk lagi
+  // karena sudah accrual dari WO. Hanya pemasukan murni non-jasa.
+  const pendapatanLain = Math.abs(
+    finance
+      .filter(t => inPeriode(t) && t.kategori === 'Pemasukan')
+      .filter(t => t.subKategori === 'Lain-lain' || !t.subKategori || t.subKategori === '')
+      .reduce((s, t) => s + t.nominal, 0)
+  );
   const totalPendapatan = pendapatanJasa + pendapatanLain;
 
-  // HPP
-  const hppMaterial = sum(t => t.kategori === 'Pengeluaran' && t.subKategori === 'Material/Suku Cadang');
-  const hppGajiProduksi = sum(t => t.kategori === 'Pengeluaran' && t.subKategori === 'Gaji Teknisi');
+  // ── HPP — Material accrual dari BOM, Gaji teknisi cash basis ──────────────
+  const woRecognizedIds = new Set(woRecognized.map(wo => wo.id));
+  const hppMaterial = boms
+    .filter(b => woRecognizedIds.has(b.woId))
+    .reduce((s, b) => s + b.jumlah * b.harga, 0);
+  const hppGajiProduksi = sumPengeluaran('Gaji Teknisi');
   const totalHpp = hppMaterial + hppGajiProduksi;
   const labaBruto = totalPendapatan - totalHpp;
 
-  // Beban usaha
-  const bebanListrikOperasional = sum(t => t.kategori === 'Pengeluaran' && t.subKategori === 'Listrik & Operasional');
-  const bebanLainLain = sum(t => t.kategori === 'Pengeluaran' && (t.subKategori === 'Lain-lain' || !t.subKategori));
-  const totalBebanUsaha = bebanListrikOperasional + bebanLainLain;
+  // ── BEBAN USAHA ────────────────────────────────────────────────────────────
+  // Penyusutan periode (auto-compute dari aset tetap dengan umurEkonomis)
+  const bebanPenyusutan = (settings.asetTetap ?? [])
+    .reduce((s, a) => s + depresiasiPeriode(a, periode), 0);
+
+  const bebanListrikOperasional = sumPengeluaran('Listrik & Operasional');
+  const bebanGajiKaryawan = sumPengeluaran('Gaji Karyawan');
+  const bebanSewa = sumPengeluaran('Sewa');
+  const bebanIklanPromosi = sumPengeluaran(['Iklan & Promosi', 'Iklan/Promosi']);
+  const bebanTransport = sumPengeluaran(['Transport', 'Transportasi']);
+  const bebanTelekomunikasi = sumPengeluaran(['Telekomunikasi', 'Telepon & Internet']);
+  const bebanBpjsAsuransi = sumPengeluaran(['BPJS & Asuransi', 'BPJS', 'Asuransi']);
+  const bebanLainLain = Math.abs(
+    finance
+      .filter(t => inPeriode(t) && t.kategori === 'Pengeluaran')
+      .filter(t => t.subKategori === 'Lain-lain' || !t.subKategori || t.subKategori === '')
+      .reduce((s, t) => s + t.nominal, 0)
+  );
+
+  const totalBebanUsaha = bebanPenyusutan + bebanListrikOperasional + bebanGajiKaryawan
+    + bebanSewa + bebanIklanPromosi + bebanTransport + bebanTelekomunikasi
+    + bebanBpjsAsuransi + bebanLainLain;
   const labaOperasional = labaBruto - totalBebanUsaha;
 
-  // PPh — tergantung jenis usaha
+  // ── PPh — tergantung jenis usaha ───────────────────────────────────────────
   let pphTerutang = 0;
   let pphInfo = '';
   const jenis = settings.jenisUsaha ?? 'UMKM_PP55';
   if (jenis === 'UMKM_PP55') {
-    // PPh Final 0.5% dari OMZET (PP 55/2022) — untuk peredaran bruto < 4.8M/tahun
-    pphTerutang = Math.round(totalPendapatan * 0.005);
-    pphInfo = 'PPh Final 0,5% × Omzet (PP 55/2022 — UMKM)';
+    // PPh Final 0,5% dari peredaran bruto (PP 55/2022). Basis = penjualan neto
+    // setelah diskon (accrual). Tidak tergantung uang masuk.
+    pphTerutang = Math.round(pendapatanJasa * 0.005);
+    pphInfo = 'PPh Final 0,5% × Peredaran Bruto (PP 55/2022 — UMKM)';
   } else if (jenis === 'Badan') {
-    // PPh Badan 22% dari laba sebelum pajak (UU HPP)
     pphTerutang = labaOperasional > 0 ? Math.round(labaOperasional * 0.22) : 0;
     pphInfo = 'PPh Badan 22% × Laba Sebelum Pajak (UU HPP)';
   } else {
-    // Manual
     const tarif = settings.tarifPphManual ?? 0;
     pphTerutang = labaOperasional > 0 ? Math.round(labaOperasional * tarif / 100) : 0;
     pphInfo = `Tarif manual ${tarif}% × Laba Sebelum Pajak`;
@@ -322,63 +468,90 @@ export function computeLabaRugi(
 
   return {
     periode,
-    pendapatanJasa, pendapatanLain, totalPendapatan,
+    pendapatanBrutoJasa, potonganPenjualan, pendapatanJasa, pendapatanLain, totalPendapatan,
     hppMaterial, hppGajiProduksi, totalHpp,
     labaBruto,
-    bebanListrikOperasional, bebanLainLain, totalBebanUsaha,
+    bebanPenyusutan, bebanListrikOperasional, bebanGajiKaryawan, bebanSewa,
+    bebanIklanPromosi, bebanTransport, bebanTelekomunikasi, bebanBpjsAsuransi,
+    bebanLainLain, totalBebanUsaha,
     labaOperasional,
     pphTerutang, pphInfo,
     labaBersih,
   };
 }
 
-/** Hitung Neraca untuk periode tertentu (per tanggal akhir periode). */
+/** Hitung Neraca per akhir periode (accrual basis). */
 export function computeNeraca(
   workOrders: WorkOrder[],
   finance: FinanceTransaction[],
+  boms: BomItem[],
   inventory: InventoryItem[],
   settings: BengkelSettings,
   periode: Periode,
 ): NeracaData {
-  // KAS: saldo awal + Σ finance sampai endDate
+  // ── KAS: saldo awal + Σ finance sampai endDate (cash basis — kas memang cash) ──
   const saldoKasAwal = settings.saldoKasAwal ?? 0;
   const arusKasSampaiPeriode = finance
     .filter(t => t.tanggal <= periode.endDate)
     .reduce((s, t) => s + t.nominal, 0);
   const kas = saldoKasAwal + arusKasSampaiPeriode;
 
-  // PIUTANG: Σ sisa tagihan WO belum lunas
+  // ── PIUTANG USAHA: WO yang sudah diakui pendapatannya (tanggalInvoice ≤ endDate)
+  //    tapi belum lunas. Konsisten dengan accrual revenue.
   const piutangUsaha = workOrders
-    .filter(wo => wo.estimatedCost > 0)
+    .filter(wo => wo.tanggalInvoice && wo.tanggalInvoice <= periode.endDate && wo.estimatedCost > 0)
     .map(wo => computeStatusBayar(wo, finance))
     .filter(p => p.status !== 'Lunas')
     .reduce((s, p) => s + p.sisaTagihan, 0);
 
-  // PERSEDIAAN: Σ stok × hargaBeli
+  // ── PERSEDIAAN: Σ stok × hargaBeli (snapshot saat ini) ────────────────────
   const persediaan = inventory.reduce((s, i) => s + (i.stok * i.hargaBeli), 0);
 
   const totalAsetLancar = kas + piutangUsaha + persediaan;
 
-  // ASET TETAP
+  // ── ASET TETAP: auto-compute akumulasi penyusutan sampai endDate ──────────
   const asetTetapList = settings.asetTetap ?? [];
   const asetTetapBruto = asetTetapList.reduce((s, a) => s + a.hargaPerolehan, 0);
-  const akumulasiPenyusutan = asetTetapList.reduce((s, a) => s + a.akumulasiPenyusutan, 0);
-  const nilaiBukuAsetTetap = asetTetapBruto - akumulasiPenyusutan;
+  const akumulasiPenyusutan = asetTetapList
+    .reduce((s, a) => s + akumulasiDepresiasiSampai(a, periode.endDate), 0);
+  const nilaiBukuAsetTetap = Math.max(asetTetapBruto - akumulasiPenyusutan, 0);
 
   const totalAset = totalAsetLancar + nilaiBukuAsetTetap;
 
-  // UTANG PPN: Σ PPN keluaran dari WO usePpn yang Finished/Picked Up
-  // (asumsi: PPN belum disetor — utang ke negara)
-  const utangPpn = workOrders
-    .filter(wo => wo.usePpn && wo.estimatedCost > 0)
+  // ── UTANG PPN: PPN keluaran WO recognized (tanggalInvoice ≤ endDate) − setoran PPN
+  //    Hanya WO Finished yg masuk; WO Queue/Proses belum recognize PPN.
+  const ppnKeluaranTotal = workOrders
+    .filter(wo => wo.usePpn && wo.tanggalInvoice && wo.tanggalInvoice <= periode.endDate && wo.estimatedCost > 0)
     .reduce((s, wo) => {
       const base = Math.max(wo.estimatedCost - (wo.diskon ?? 0), 0);
       return s + Math.round(base * ((wo.ppnPercent ?? 11) / 100));
     }, 0);
+  const setoranPpn = Math.abs(
+    finance
+      .filter(t => t.tanggal <= periode.endDate && t.kategori === 'Pengeluaran' && t.subKategori === 'Setoran PPN')
+      .reduce((s, t) => s + t.nominal, 0)
+  );
+  const utangPpn = Math.max(ppnKeluaranTotal - setoranPpn, 0);
 
-  // PPh dari Laba Rugi
-  const lr = computeLabaRugi(workOrders, finance, settings, periode);
-  const utangPph = lr.pphTerutang;
+  // ── UTANG PPh: PPh terutang akumulatif − setoran PPh sampai endDate ────────
+  //    Hitung PPh dari awal sampai endDate. Untuk akurasi cumulative, kita
+  //    gunakan periode synthetic dari epoch awal (1970-01-01) sampai endDate.
+  const periodeAkumulatif: Periode = {
+    startDate: '1970-01-01',
+    endDate: periode.endDate,
+    label: `Akumulatif s/d ${periode.endDate}`,
+  };
+  const lrAkumulatif = computeLabaRugi(workOrders, finance, boms, settings, periodeAkumulatif);
+  const pphAkumulatif = lrAkumulatif.pphTerutang;
+  const setoranPph = Math.abs(
+    finance
+      .filter(t => t.tanggal <= periode.endDate && t.kategori === 'Pengeluaran' && t.subKategori === 'Setoran PPh')
+      .reduce((s, t) => s + t.nominal, 0)
+  );
+  const utangPph = Math.max(pphAkumulatif - setoranPph, 0);
+
+  // Laba Rugi periode berjalan untuk pos "Laba Tahun Berjalan" di Ekuitas
+  const lrPeriode = computeLabaRugi(workOrders, finance, boms, settings, periode);
 
   const utangJangkaPendekLain = settings.utangJangkaPendek ?? [];
   const totalUtangJangkaPendekLain = utangJangkaPendekLain.reduce((s, u) => s + u.nominal, 0);
@@ -389,11 +562,17 @@ export function computeNeraca(
 
   const totalKewajiban = totalKewajibanJangkaPendek + totalKewajibanJangkaPanjang;
 
-  // EKUITAS
+  // ── EKUITAS ────────────────────────────────────────────────────────────────
   const modalDisetor = settings.modalAwal ?? 0;
   const labaDitahan = settings.labaDitahanAwal ?? 0;
-  const labaTahunBerjalan = lr.labaBersih;
-  const totalEkuitas = modalDisetor + labaDitahan + labaTahunBerjalan;
+  const labaTahunBerjalan = lrPeriode.labaBersih;
+  // Prive: total penarikan pemilik sampai endDate (mengurangi ekuitas)
+  const prive = Math.abs(
+    finance
+      .filter(t => t.tanggal <= periode.endDate && t.kategori === 'Pengeluaran' && t.subKategori === 'Prive')
+      .reduce((s, t) => s + t.nominal, 0)
+  );
+  const totalEkuitas = modalDisetor + labaDitahan + labaTahunBerjalan - prive;
 
   const totalKewajibanEkuitas = totalKewajiban + totalEkuitas;
   const selisih = totalAset - totalKewajibanEkuitas;
@@ -408,7 +587,7 @@ export function computeNeraca(
     totalKewajibanJangkaPendek,
     utangJangkaPanjang, totalKewajibanJangkaPanjang,
     totalKewajiban,
-    modalDisetor, labaDitahan, labaTahunBerjalan, totalEkuitas,
+    modalDisetor, labaDitahan, prive, labaTahunBerjalan, totalEkuitas,
     totalKewajibanEkuitas, selisih,
   };
 }
@@ -439,17 +618,29 @@ export interface Customer {
   totalWo: number;
 }
 
-/** Aset Tetap (peralatan, kendaraan, bangunan, dll) untuk Neraca. */
+/** Aset Tetap (peralatan, kendaraan, bangunan, dll) untuk Neraca.
+ *
+ * Penyusutan auto-compute via metode garis lurus PSAK 16:
+ *   penyusutan_per_tahun = (hargaPerolehan − nilaiResidu) / umurEkonomis
+ *
+ * Bila `umurEkonomis` tidak diisi, penyusutan dianggap 0 dan `akumulasiPenyusutan`
+ * jadi snapshot manual dari user (mode legacy).
+ *
+ * Tanah TIDAK disusutkan (PSAK 16) — kategori 'Tanah' akan di-skip otomatis.
+ */
 export interface AsetTetap {
   id: string;
   nama: string;
   kategori: 'Tanah' | 'Bangunan' | 'Kendaraan' | 'Peralatan' | 'Lainnya';
   hargaPerolehan: number;
-  /** Akumulasi penyusutan sampai akhir periode buku. */
+  /** Akumulasi penyusutan snapshot manual (mode legacy, bila umurEkonomis tidak diisi). */
   akumulasiPenyusutan: number;
+  /** ISO date tanggal aset diperoleh. Required untuk auto-compute penyusutan. */
   tanggalPerolehan?: string;
-  /** Umur ekonomis dalam tahun (untuk hitung penyusutan garis lurus). Opsional. */
+  /** Umur ekonomis dalam tahun. Required untuk auto-compute penyusutan. */
   umurEkonomis?: number;
+  /** Nilai residu / sisa pada akhir umur ekonomis (Rp). Default 0. */
+  nilaiResidu?: number;
 }
 
 /** Utang manual (utang bank, utang lain-lain) — di luar utang dagang otomatis. */
