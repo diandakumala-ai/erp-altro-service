@@ -1340,13 +1340,17 @@ export default function PrintTemplates() {
             <tbody>
               {/* PENDAPATAN */}
               <tr><td className="pt-2 pb-1 font-bold uppercase tracking-wider text-xs text-indigo-700" colSpan={2}>A. PENDAPATAN USAHA</td></tr>
-              <Row label="Pendapatan Jasa Servis" value={lr.pendapatanJasa} indent={1} tone="emerald" />
+              <Row label="Pendapatan Bruto Jasa Servis" value={lr.pendapatanBrutoJasa} indent={1} tone="emerald" />
+              {lr.potonganPenjualan > 0 && (
+                <Row label="(−) Potongan Penjualan / Diskon" value={-lr.potonganPenjualan} indent={1} tone="red" />
+              )}
+              <Row label="Pendapatan Neto Jasa Servis" value={lr.pendapatanJasa} indent={1} bold tone="emerald" />
               <Row label="Pendapatan Lain-lain" value={lr.pendapatanLain} indent={1} tone="emerald" />
               <Row label="Total Pendapatan" value={lr.totalPendapatan} bold topBorder tone="emerald" />
 
               {/* HPP */}
               <tr><td className="pt-4 pb-1 font-bold uppercase tracking-wider text-xs text-red-700" colSpan={2}>B. BEBAN POKOK PENDAPATAN (HPP)</td></tr>
-              <Row label="Pembelian Material / Suku Cadang" value={lr.hppMaterial} indent={1} tone="red" />
+              <Row label="Beban Material / Suku Cadang Terpakai" value={lr.hppMaterial} indent={1} tone="red" />
               <Row label="Gaji / Upah Tenaga Produksi (Teknisi)" value={lr.hppGajiProduksi} indent={1} tone="red" />
               <Row label="Total Beban Pokok Pendapatan" value={lr.totalHpp} bold topBorder tone="red" />
 
@@ -1360,7 +1364,14 @@ export default function PrintTemplates() {
 
               {/* BEBAN USAHA */}
               <tr><td className="pt-4 pb-1 font-bold uppercase tracking-wider text-xs text-red-700" colSpan={2}>D. BEBAN USAHA</td></tr>
-              <Row label="Beban Listrik & Operasional" value={lr.bebanListrikOperasional} indent={1} tone="red" />
+              {lr.bebanPenyusutan > 0 && <Row label="Beban Penyusutan Aset Tetap" value={lr.bebanPenyusutan} indent={1} tone="red" />}
+              {lr.bebanListrikOperasional > 0 && <Row label="Beban Listrik & Operasional" value={lr.bebanListrikOperasional} indent={1} tone="red" />}
+              {lr.bebanGajiKaryawan > 0 && <Row label="Beban Gaji Karyawan (non-produksi)" value={lr.bebanGajiKaryawan} indent={1} tone="red" />}
+              {lr.bebanSewa > 0 && <Row label="Beban Sewa" value={lr.bebanSewa} indent={1} tone="red" />}
+              {lr.bebanIklanPromosi > 0 && <Row label="Beban Iklan & Promosi" value={lr.bebanIklanPromosi} indent={1} tone="red" />}
+              {lr.bebanTransport > 0 && <Row label="Beban Transport" value={lr.bebanTransport} indent={1} tone="red" />}
+              {lr.bebanTelekomunikasi > 0 && <Row label="Beban Telekomunikasi" value={lr.bebanTelekomunikasi} indent={1} tone="red" />}
+              {lr.bebanBpjsAsuransi > 0 && <Row label="Beban BPJS & Asuransi" value={lr.bebanBpjsAsuransi} indent={1} tone="red" />}
               <Row label="Beban Lain-lain" value={lr.bebanLainLain} indent={1} tone="red" />
               <Row label="Total Beban Usaha" value={lr.totalBebanUsaha} bold topBorder tone="red" />
 
@@ -1391,7 +1402,9 @@ export default function PrintTemplates() {
             <p className="font-semibold mb-1">Catatan:</p>
             <ol className="list-decimal pl-5 space-y-0.5">
               <li>Laporan disusun berdasarkan data transaksi yang tercatat di sistem ERP.</li>
-              <li>Pendapatan diakui pada saat penerimaan kas (basis kas).</li>
+              <li>Pendapatan diakui secara <span className="font-semibold">akrual</span> — yaitu saat invoice diterbitkan (status WO <em>Finished</em>), bukan saat penerimaan kas. Sesuai SAK ETAP & basis PP 55/2022 (peredaran bruto).</li>
+              <li>Beban Pokok Material dihitung dari konsumsi BOM Work Order yang invoice-nya terbit di periode ini.</li>
+              <li>Beban Penyusutan dihitung otomatis dengan metode garis lurus (PSAK 16) dari aset tetap yang punya umur ekonomis.</li>
               <li>PPh dihitung berdasarkan: <span className="font-semibold">{lr.pphInfo}</span>.</li>
               <li>Laporan ini disusun untuk keperluan pelaporan pajak SPT Tahunan.</li>
             </ol>
@@ -1564,12 +1577,25 @@ export default function PrintTemplates() {
                   <Row label="Modal Disetor" value={n.modalDisetor} indent={1} tone="emerald" />
                   <Row label="Laba Ditahan (akumulasi)" value={n.labaDitahan} indent={1} tone="emerald" />
                   <Row label="Laba Tahun Berjalan" value={n.labaTahunBerjalan} indent={1} tone="emerald" />
+                  {n.prive > 0 && (
+                    <Row label="(−) Prive / Penarikan Pemilik" value={-n.prive} indent={1} tone="red" />
+                  )}
                   <Row label="Total Ekuitas" value={n.totalEkuitas} bold topBorder tone="emerald" />
 
                   <tr className="bg-amber-100 border-y-2 border-amber-700">
                     <td className="py-2 px-2 font-black uppercase text-xs">TOTAL KEWAJIBAN &amp; EKUITAS</td>
                     <td className="py-2 px-2 text-right tabular-nums font-black text-amber-800">Rp {fmt(n.totalKewajibanEkuitas)}</td>
                   </tr>
+                  {n.selisih !== 0 && (
+                    <tr className="bg-red-50">
+                      <td className="py-1.5 px-2 font-bold text-xs uppercase text-red-700" title="Selisih = Total Aset − (Kewajiban + Ekuitas). Idealnya 0 bila semua transaksi tercatat & saldo awal benar.">
+                        Selisih (perlu rekonsiliasi)
+                      </td>
+                      <td className="py-1.5 px-2 text-right tabular-nums font-bold text-red-700">
+                        {n.selisih < 0 ? `(${fmt(Math.abs(n.selisih))})` : fmt(n.selisih)}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1579,12 +1605,15 @@ export default function PrintTemplates() {
           <div className="mt-8 text-xs text-slate-600 border-t border-slate-300 pt-3">
             <p className="font-semibold mb-1">Catatan:</p>
             <ol className="list-decimal pl-5 space-y-0.5">
-              <li>Neraca disusun per tanggal akhir periode dari saldo transaksi terkini.</li>
-              <li>Kas = Saldo Kas Awal + Σ semua transaksi keuangan sampai tanggal neraca.</li>
-              <li>Piutang Usaha = Σ sisa tagihan Work Order yang belum lunas.</li>
-              <li>Persediaan = Σ stok × harga beli rata-rata.</li>
-              <li>Utang PPN = Σ PPN keluaran dari Work Order yang menggunakan PPN.</li>
-              <li>Aset tetap, utang manual, modal, dan laba ditahan diinput di Pengaturan.</li>
+              <li>Neraca disusun per tanggal akhir periode (basis akrual).</li>
+              <li>Kas = Saldo Kas Awal + Σ transaksi keuangan sampai tanggal neraca.</li>
+              <li>Piutang Usaha = Σ sisa tagihan Work Order yang invoice-nya sudah terbit tapi belum lunas.</li>
+              <li>Persediaan = Σ stok × harga beli (snapshot).</li>
+              <li>Utang PPN = (PPN keluaran dari WO ber-invoice) − (Setoran PPN ke kas negara).</li>
+              <li>Utang PPh = (PPh terutang akumulatif sejak awal usaha) − (Setoran PPh ke kas negara).</li>
+              <li>Akumulasi Penyusutan dihitung otomatis dengan metode garis lurus (PSAK 16) dari aset tetap yang punya umur ekonomis. Tanah tidak disusutkan.</li>
+              <li>Prive = total penarikan pemilik (Pengeluaran sub-kategori 'Prive'), mengurangi ekuitas.</li>
+              <li>Bila ada selisih, periksa: saldo kas awal, modal disetor, umur ekonomis aset tetap, dan pengakuan piutang/PPN periode-periode sebelumnya.</li>
             </ol>
           </div>
 

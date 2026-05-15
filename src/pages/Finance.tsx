@@ -44,12 +44,41 @@ function KategoriCell({ value, onSave }: { value: string; onSave: (v: string) =>
   );
 }
 
+/** Sub-kategori standar — single source of truth.
+ *
+ * Pengelompokan beban di Laba Rugi (computeLabaRugi):
+ * - HPP (Beban Pokok Pendapatan): Material/Suku Cadang*, Gaji Teknisi
+ *   (*) Material di Laba Rugi sebenarnya pakai BOM accrual, sub-kategori ini
+ *       tetap dipakai untuk tracking cash flow pembelian.
+ * - Beban Usaha: semua sisanya kecuali Setoran PPN/PPh & Prive
+ * - Setoran PPN / PPh: mengurangi utang pajak di Neraca (BUKAN beban)
+ * - Prive: mengurangi ekuitas di Neraca (BUKAN beban)
+ */
+export const SUB_KATEGORI_PEMASUKAN = ['DP', 'Pelunasan', 'Pembayaran Servis', 'Lain-lain'] as const;
+export const SUB_KATEGORI_PENGELUARAN_HPP = ['Material/Suku Cadang', 'Gaji Teknisi'] as const;
+export const SUB_KATEGORI_PENGELUARAN_BEBAN = [
+  'Listrik & Operasional',
+  'Gaji Karyawan',
+  'Sewa',
+  'Iklan & Promosi',
+  'Transport',
+  'Telekomunikasi',
+  'BPJS & Asuransi',
+  'Lain-lain',
+] as const;
+export const SUB_KATEGORI_PENGELUARAN_NERACA = ['Setoran PPN', 'Setoran PPh', 'Prive'] as const;
+export const SUB_KATEGORI_PENGELUARAN = [
+  ...SUB_KATEGORI_PENGELUARAN_HPP,
+  ...SUB_KATEGORI_PENGELUARAN_BEBAN,
+  ...SUB_KATEGORI_PENGELUARAN_NERACA,
+] as const;
+
 function SubKategoriCell({ value, onSave, kategori }: { value: string; onSave: (v: string) => void; kategori: string }) {
   const [editing, setEditing] = useState(false);
 
   const options = kategori === 'Pemasukan'
-    ? ['DP', 'Pelunasan', 'Lain-lain']
-    : ['Material/Suku Cadang', 'Listrik & Operasional', 'Gaji Teknisi', 'Lain-lain'];
+    ? SUB_KATEGORI_PEMASUKAN
+    : SUB_KATEGORI_PENGELUARAN;
 
   return editing ? (
     <select title="Pilih Sub-Kategori" aria-label="Pilih Sub-Kategori" autoFocus
@@ -388,9 +417,8 @@ export default function Finance() {
 
   // Breakdown pemasukan per sub-kategori untuk periode dipilih
   const subPemasukan = useMemo(() => {
-    const subs = ['DP', 'Pelunasan', 'Lain-lain'];
-    return subs.map(sub => ({
-      sub,
+    return SUB_KATEGORI_PEMASUKAN.map(sub => ({
+      sub: sub as string,
       total: reportTrx.filter(t => t.nominal > 0 && t.subKategori === sub).reduce((a, b) => a + b.nominal, 0),
     })).concat([{
       sub: 'Tanpa Sub-Kategori',
@@ -400,9 +428,8 @@ export default function Finance() {
 
   // Breakdown pengeluaran per sub-kategori untuk periode dipilih
   const subPengeluaran = useMemo(() => {
-    const subs = ['Material/Suku Cadang', 'Listrik & Operasional', 'Gaji Teknisi', 'Lain-lain'];
-    return subs.map(sub => ({
-      sub,
+    return SUB_KATEGORI_PENGELUARAN.map(sub => ({
+      sub: sub as string,
       total: Math.abs(reportTrx.filter(t => t.nominal < 0 && t.subKategori === sub).reduce((a, b) => a + b.nominal, 0)),
     })).concat([{
       sub: 'Tanpa Sub-Kategori',

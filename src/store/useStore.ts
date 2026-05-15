@@ -76,6 +76,9 @@ export interface FinanceTransaction {
   kategori: string;
   subKategori?: string;
   deskripsi: string;
+  /** Signed: positif untuk Pemasukan, negatif untuk Pengeluaran. UI auto-coerce
+   *  sign saat input via Finance.tsx (lihat addFinance handler). Hitungan summary
+   *  pakai Math.abs() bila perlu nilai absolut. */
   nominal: number;
   catatan?: string;
   isRutin?: boolean;
