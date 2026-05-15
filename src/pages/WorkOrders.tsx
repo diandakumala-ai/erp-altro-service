@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import { Plus, Trash2, Download, FileSpreadsheet, Wrench, FileText, Printer, Truck, Receipt } from 'lucide-react';
 import { useStore, computeStatusBayar, type WorkOrder, type BomItem, type ServiceItem, type StatusBayar } from '../store/useStore';
@@ -215,6 +215,10 @@ export default function WorkOrders() {
   const finance = useStore(s => s.finance);
 
   const [selectedWO, setSelectedWO] = useState<WorkOrder | null>(null);
+  // Intent toggle Bayar Penuh vs Pakai DP. null = belum ada interaksi user di session ini
+  // (toggle ikut derivasi dari dpAmount). 'full' / 'partial' = user sudah klik eksplisit,
+  // toggle visual respect intent walaupun grandTotal masih 0 (belum ada material/jasa).
+  const [dpModeIntent, setDpModeIntent] = useState<'full' | 'partial' | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [sortField, setSortField] = useState<string | null>(null);
@@ -335,6 +339,25 @@ export default function WorkOrders() {
   const totalSpk = workOrders.length;
   const totalSelesai = workOrders.filter(w => isFinished(w.status)).length;
   const overdueCount = workOrders.filter(w => !isFinished(w.status) && w.estimasiSelesai !== '-' && w.estimasiSelesai < today).length;
+
+  // Reset dpModeIntent setiap kali Dialog beralih WO (atau tertutup) supaya
+  // toggle re-derive dari dpAmount tersimpan, bukan intent session sebelumnya.
+  useEffect(() => {
+    setDpModeIntent(null);
+  }, [selectedWO?.id]);
+
+  // Live total material+jasa untuk WO yang sedang dibuka di Dialog.
+  // Bikin section Diskon, PPN, Rencana Pembayaran reaktif sebelum user klik Save —
+  // tanpa ini, `estimatedCost` masih 0 untuk SPK baru sehingga input persen & toggle DP
+  // tidak berfungsi. Fallback ke estimatedCost tersimpan kalau bom/service belum ada
+  // (mis. SPK lama dengan data legacy).
+  const liveBaseSelected = useMemo(() => {
+    if (!selectedWO) return 0;
+    const mat = boms.filter(b => b.woId === selectedWO.id).reduce((a, b) => a + b.jumlah * b.harga, 0);
+    const svc = services.filter(s => s.woId === selectedWO.id).reduce((a, s) => a + s.biaya, 0);
+    return mat + svc;
+  }, [boms, services, selectedWO?.id]);
+  const currentBase = liveBaseSelected > 0 ? liveBaseSelected : (selectedWO?.estimatedCost ?? 0);
 
   const thProps = { sortField, sortDir, onSort: handleSort };
 
@@ -850,29 +873,37 @@ export default function WorkOrders() {
                         max="100"
                         step="0.5"
                         value={
-                          selectedWO.estimatedCost > 0
-                            ? +((((selectedWO.diskon ?? 0) / selectedWO.estimatedCost) * 100).toFixed(2))
+                          currentBase > 0
+                            ? +((((selectedWO.diskon ?? 0) / currentBase) * 100).toFixed(2))
                             : 0
                         }
                         onChange={e => {
                           const pct = Math.min(100, Math.max(0, Number(e.target.value)));
-                          setSelectedWO({ ...selectedWO, diskon: Math.round(selectedWO.estimatedCost * pct / 100) });
+                          setSelectedWO({ ...selectedWO, diskon: Math.round(currentBase * pct / 100) });
                         }}
+                        disabled={currentBase === 0}
+                        title={currentBase === 0 ? 'Tambahkan material/jasa dulu untuk hitung persentase' : undefined}
                         className="flex-1 px-3 py-1.5 text-sm text-right focus:outline-none min-w-0 w-full"
                       />
                       <span className="px-2.5 py-1.5 bg-slate-50 text-xs text-slate-500 border-l border-slate-300 font-medium">%</span>
                     </div>
                   </div>
                 </div>
+                {/* Hint kalau base masih 0 (belum ada material/jasa) */}
+                {currentBase === 0 && (
+                  <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                    Tambahkan material atau jasa di atas dulu untuk mengaktifkan input persentase diskon.
+                  </p>
+                )}
                 {/* Summary setelah diskon */}
-                {(selectedWO.diskon ?? 0) > 0 && selectedWO.estimatedCost > 0 && (
+                {(selectedWO.diskon ?? 0) > 0 && currentBase > 0 && (
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-xs bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
                     <span className="text-slate-500">Tagihan akhir:</span>
-                    <span className="line-through text-slate-400">Rp {fmt(selectedWO.estimatedCost)}</span>
+                    <span className="line-through text-slate-400">Rp {fmt(currentBase)}</span>
                     <span className="text-amber-500">→</span>
-                    <span className="font-bold text-slate-800">Rp {fmt(Math.max(selectedWO.estimatedCost - (selectedWO.diskon ?? 0), 0))}</span>
+                    <span className="font-bold text-slate-800">Rp {fmt(Math.max(currentBase - (selectedWO.diskon ?? 0), 0))}</span>
                     <span className="ml-auto text-amber-700 font-semibold">
-                      hemat {(((selectedWO.diskon ?? 0) / selectedWO.estimatedCost) * 100).toFixed(1)}% · Rp {fmt(selectedWO.diskon ?? 0)}
+                      hemat {(((selectedWO.diskon ?? 0) / currentBase) * 100).toFixed(1)}% · Rp {fmt(selectedWO.diskon ?? 0)}
                     </span>
                   </div>
                 )}
@@ -882,7 +913,7 @@ export default function WorkOrders() {
               {(() => {
                 const usePpn = selectedWO.usePpn ?? false;
                 const ppnPercent = selectedWO.ppnPercent ?? 11;
-                const baseAfterDiskon = Math.max(selectedWO.estimatedCost - (selectedWO.diskon ?? 0), 0);
+                const baseAfterDiskon = Math.max(currentBase - (selectedWO.diskon ?? 0), 0);
                 const ppnNominal = usePpn ? Math.round(baseAfterDiskon * (ppnPercent / 100)) : 0;
                 return (
                   <div className="bg-white border border-indigo-200 rounded-lg shadow-sm p-4">
@@ -986,13 +1017,16 @@ export default function WorkOrders() {
 
               {/* Rencana Pembayaran (DP / Partial Payment) */}
               {(() => {
-                const baseAfterDiskon = Math.max(selectedWO.estimatedCost - (selectedWO.diskon ?? 0), 0);
+                const baseAfterDiskon = Math.max(currentBase - (selectedWO.diskon ?? 0), 0);
                 const ppnNominal = (selectedWO.usePpn ?? false)
                   ? Math.round(baseAfterDiskon * ((selectedWO.ppnPercent ?? 11) / 100))
                   : 0;
                 const grandTotal = baseAfterDiskon + ppnNominal;
                 const dpAmount = selectedWO.dpAmount ?? 0;
-                const isPartial = dpAmount > 0;
+                // Toggle visual: pakai dpModeIntent kalau eksplisit di-set user di session ini,
+                // fallback ke derivasi dari dpAmount. Pakai intent agar tombol visual switch
+                // walaupun grandTotal = 0 (belum ada material/jasa).
+                const isPartial = dpModeIntent !== null ? dpModeIntent === 'partial' : dpAmount > 0;
                 const dpPct = grandTotal > 0 ? +((dpAmount / grandTotal) * 100).toFixed(2) : 0;
                 const sisaPelunasan = Math.max(grandTotal - dpAmount, 0);
                 return (
@@ -1017,11 +1051,13 @@ export default function WorkOrders() {
                           type="button"
                           onClick={() => {
                             if (opt.v) {
-                              // Aktifkan DP — default 50% kalau belum ada
+                              setDpModeIntent('partial');
+                              // Aktifkan DP — default 50% kalau belum ada nilai & grandTotal sudah > 0
                               if (dpAmount === 0 && grandTotal > 0) {
                                 setSelectedWO({ ...selectedWO, dpAmount: Math.round(grandTotal / 2) });
                               }
                             } else {
+                              setDpModeIntent('full');
                               // Matikan DP — set ke 0
                               setSelectedWO({ ...selectedWO, dpAmount: 0 });
                             }
@@ -1038,8 +1074,15 @@ export default function WorkOrders() {
                       ))}
                     </div>
 
-                    {/* Input DP — hanya saat partial */}
-                    {isPartial && (
+                    {/* Hint kalau base masih 0 saat user pilih Pakai DP */}
+                    {isPartial && grandTotal === 0 && (
+                      <p className="mb-3 text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                        Tambahkan material atau jasa di atas dulu untuk mengatur nominal DP.
+                      </p>
+                    )}
+
+                    {/* Input DP — hanya saat partial & ada grandTotal */}
+                    {isPartial && grandTotal > 0 && (
                       <>
                         <div className="flex items-end gap-2">
                           {/* Input Nominal Rp */}

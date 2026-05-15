@@ -34,31 +34,53 @@ interface ActionMenuProps {
  */
 export function ActionMenu({ actions, trigger, ariaLabel = 'Buka menu aksi', align = 'right' }: ActionMenuProps) {
   const [open, setOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number; right: number } | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; right: number; maxHeight: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const hasCustomTrigger = !!trigger;
 
-  // Track posisi trigger untuk re-position menu yg di-portal-kan
+  // Estimasi tinggi 1 item menu (px). Dipakai sebagai fallback sebelum menu mount.
+  const itemHeight = 44;
+  const verticalPadding = 16;
+  const viewportGap = 8;
+
+  // Track posisi trigger untuk re-position menu yg di-portal-kan.
+  // Flip ke atas kalau ruang di bawah trigger tidak cukup tapi ruang di atas lebih luas
+  // — mencegah menu pada baris paling bawah tabel ter-clip oleh viewport.
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) return;
     const update = () => {
-      const rect = triggerRef.current!.getBoundingClientRect();
+      if (!triggerRef.current) return;
+      const rect = triggerRef.current.getBoundingClientRect();
+      // Tinggi aktual dari DOM kalau sudah mount, fallback ke estimasi dari jumlah actions
+      const measured = menuRef.current?.offsetHeight;
+      const estimated = actions.length * itemHeight + verticalPadding;
+      const menuHeight = measured && measured > 0 ? measured : estimated;
+      const spaceBelow = window.innerHeight - rect.bottom - viewportGap;
+      const spaceAbove = rect.top - viewportGap;
+      const flipUp = menuHeight > spaceBelow && spaceAbove > spaceBelow;
+      const maxHeight = Math.max(120, flipUp ? spaceAbove : spaceBelow);
       setMenuPos({
-        top: rect.bottom + 4, // mt-1 ≈ 4px
+        top: flipUp
+          ? Math.max(viewportGap, rect.top - menuHeight - 4)
+          : rect.bottom + 4,
         left: rect.left,
         right: window.innerWidth - rect.right,
+        maxHeight,
       });
     };
     update();
+    // Re-measure sekali setelah paint pertama supaya pakai offsetHeight aktual menu
+    const raf = requestAnimationFrame(update);
     window.addEventListener('scroll', update, true);
     window.addEventListener('resize', update);
     return () => {
+      cancelAnimationFrame(raf);
       window.removeEventListener('scroll', update, true);
       window.removeEventListener('resize', update);
     };
-  }, [open]);
+  }, [open, actions.length]);
 
   useEffect(() => {
     if (!open) return;
@@ -101,10 +123,11 @@ export function ActionMenu({ actions, trigger, ariaLabel = 'Buka menu aksi', ali
         <div
           ref={menuRef}
           role="menu"
-          className="fixed min-w-[200px] bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
+          className="fixed min-w-[200px] bg-white border border-slate-200 rounded-lg shadow-lg overflow-y-auto"
           style={{
             zIndex: 'var(--z-dropdown)',
             top: menuPos.top,
+            maxHeight: menuPos.maxHeight,
             ...(align === 'right' ? { right: menuPos.right } : { left: menuPos.left }),
           }}
         >
